@@ -47,6 +47,8 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/orgs/*/assignFenceToEntity", "/api/orgs/*/getAssignedEntityOfFence").permitAll()
                 // User Fences endpoints
                 .antMatchers("/api/orgs/*/getUserFences").permitAll()
+                // Punch Request endpoints
+                .antMatchers("/api/orgs/*/requestPunchForEntity", "/api/orgs/*/getPendingRequest", "/api/orgs/*/getPunchRequestById", "/api/orgs/*/getPendingRequestHistory").permitAll()
                 .antMatchers("/h2-console/**").permitAll()
                 .anyRequest().authenticated();
 
