@@ -5,6 +5,7 @@ import com.tse.core_application.constants.attendance.ExceptionCode;
 import com.tse.core_application.entity.policy.AttendancePolicy;
 import com.tse.core_application.entity.attendance.AttendanceEvent;
 import com.tse.core_application.entity.fence.GeoFence;
+import com.tse.core_application.entity.punch.PunchRequest;
 import com.tse.core_application.util.GeoMath;
 import org.springframework.stereotype.Service;
 
@@ -31,11 +32,11 @@ public class AcceptanceRules {
     }
 
     /**
-     * Validate a CHECK_IN or CHECK_OUT event.
+     * Validate a CHECK_IN, CHECK_OUT, BREAK_START, or BREAK_END event.
      *
      * @param orgId         Organization ID
      * @param accountId     Account ID
-     * @param eventKind     CHECK_IN or CHECK_OUT
+     * @param eventKind     Event kind
      * @param lat           Latitude
      * @param lon           Longitude
      * @param accuracyM     GPS accuracy in meters
@@ -59,6 +60,11 @@ public class AcceptanceRules {
         boolean success;
         String verdict;
         String failReason = null;
+
+        // Handle BREAK events separately
+        if (eventKind == EventKind.BREAK_START || eventKind == EventKind.BREAK_END) {
+            return validateBreak(eventKind, todayEvents, flags);
+        }
 
         // 1. Check accuracy gate
         if (accuracyM != null && accuracyM > policy.getAccuracyGateM()) {
@@ -227,6 +233,90 @@ public class AcceptanceRules {
             }
         }
         return null;
+    }
+
+    /**
+     * Validate BREAK_START or BREAK_END event.
+     */
+    private ValidationResult validateBreak(EventKind eventKind, List<AttendanceEvent> todayEvents, Map<String, Object> flags) {
+        // 1. Check if user has checked in today
+        if (!isCurrentlyCheckedIn(todayEvents)) {
+            return new ValidationResult(false, "FAIL", ExceptionCode.MISSING_CHECKIN.name(), flags);
+        }
+
+        // 2. Check current break state
+        boolean onBreak = isCurrentlyOnBreak(todayEvents);
+
+        if (eventKind == EventKind.BREAK_START) {
+            if (onBreak) {
+                return new ValidationResult(false, "FAIL", ExceptionCode.ALREADY_ON_BREAK.name(), flags);
+            }
+            // BREAK_START is valid
+            return new ValidationResult(true, "PASS", null, flags);
+
+        } else if (eventKind == EventKind.BREAK_END) {
+            if (!onBreak) {
+                return new ValidationResult(false, "FAIL", ExceptionCode.NOT_ON_BREAK.name(), flags);
+            }
+            // BREAK_END is valid
+            return new ValidationResult(true, "PASS", null, flags);
+        }
+
+        return new ValidationResult(false, "FAIL", "INVALID_EVENT_KIND", flags);
+    }
+
+    private boolean isCurrentlyOnBreak(List<AttendanceEvent> events) {
+        if (events == null || events.isEmpty()) {
+            return false;
+        }
+        // Walk backwards to find the last BREAK_START or BREAK_END
+        for (int i = events.size() - 1; i >= 0; i--) {
+            AttendanceEvent event = events.get(i);
+            if (!event.getSuccess()) {
+                continue;
+            }
+            if (event.getEventKind() == EventKind.BREAK_START) {
+                return true;
+            } else if (event.getEventKind() == EventKind.BREAK_END) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validate PUNCHED event (supervisor/manager-triggered punch).
+     *
+     * @param punchRequest  The punch request being fulfilled
+     * @param todayEvents   Events for today
+     * @return ValidationResult
+     */
+    public ValidationResult validatePunched(PunchRequest punchRequest, List<AttendanceEvent> todayEvents) {
+        Map<String, Object> flags = new HashMap<>();
+
+        // 1. Check if PunchRequest is valid and pending
+        if (punchRequest == null || punchRequest.getState() != PunchRequest.State.PENDING) {
+            return new ValidationResult(false, "FAIL", ExceptionCode.FAILED_PUNCH.name(), flags);
+        }
+
+        // 2. Check time window
+        OffsetDateTime now = OffsetDateTime.now();
+        if (now.isBefore(punchRequest.getRequestedDatetime()) || now.isAfter(punchRequest.getExpiresAt())) {
+            return new ValidationResult(false, "FAIL", ExceptionCode.FAILED_PUNCH.name(), flags);
+        }
+
+        // 3. Validate user state - must have checked in today
+        if (!isCurrentlyCheckedIn(todayEvents)) {
+            return new ValidationResult(false, "FAIL", ExceptionCode.MISSING_CHECKIN.name(), flags);
+        }
+
+        // 4. User must not be on break
+        if (isCurrentlyOnBreak(todayEvents)) {
+            return new ValidationResult(false, "FAIL", ExceptionCode.BEFORE_CHECKOUT.name(), flags);
+        }
+
+        // PUNCHED event is valid
+        return new ValidationResult(true, "PASS", null, flags);
     }
 
     /**

@@ -13,12 +13,14 @@ import com.tse.core_application.entity.attendance.AttendanceDay;
 import com.tse.core_application.entity.attendance.AttendanceEvent;
 import com.tse.core_application.entity.fence.GeoFence;
 import com.tse.core_application.entity.policy.AttendancePolicy;
+import com.tse.core_application.entity.punch.PunchRequest;
 import com.tse.core_application.exception.ProblemException;
 import com.tse.core_application.repository.assignment.FenceAssignmentRepository;
 import com.tse.core_application.repository.attendance.AttendanceDayRepository;
 import com.tse.core_application.repository.attendance.AttendanceEventRepository;
 import com.tse.core_application.repository.fence.GeoFenceRepository;
 import com.tse.core_application.repository.policy.AttendancePolicyRepository;
+import com.tse.core_application.repository.punch.PunchRequestRepository;
 import com.tse.core_application.service.membership.MembershipProvider;
 import com.tse.core_application.service.policy.PolicyGate;
 import org.slf4j.Logger;
@@ -45,6 +47,7 @@ public class AttendanceService {
     private final AttendancePolicyRepository policyRepository;
     private final FenceAssignmentRepository assignmentRepository;
     private final GeoFenceRepository fenceRepository;
+    private final PunchRequestRepository punchRequestRepository;
     private final MembershipProvider membershipProvider;
     private final PolicyGate policyGate;
     private final AcceptanceRules acceptanceRules;
@@ -57,6 +60,7 @@ public class AttendanceService {
             AttendancePolicyRepository policyRepository,
             FenceAssignmentRepository assignmentRepository,
             GeoFenceRepository fenceRepository,
+            PunchRequestRepository punchRequestRepository,
             MembershipProvider membershipProvider,
             PolicyGate policyGate,
             AcceptanceRules acceptanceRules,
@@ -67,6 +71,7 @@ public class AttendanceService {
         this.policyRepository = policyRepository;
         this.assignmentRepository = assignmentRepository;
         this.fenceRepository = fenceRepository;
+        this.punchRequestRepository = punchRequestRepository;
         this.membershipProvider = membershipProvider;
         this.policyGate = policyGate;
         this.acceptanceRules = acceptanceRules;
@@ -190,6 +195,81 @@ public class AttendanceService {
         dayRollupService.updateDayRollup(orgId, request.getAccountId(), dateKey, updatedEvents);
 
         // 12. Return response
+        return mapToResponse(savedEvent);
+    }
+
+    /**
+     * Process a PUNCHED event (supervisor/manager-triggered punch).
+     */
+    @Transactional
+    public PunchResponse processPunchedEvent(long orgId, long accountId, long punchRequestId) {
+        // 1. Validate policy is active
+        policyGate.assertPolicyActive(orgId);
+
+        // 2. Fetch the punch request
+        PunchRequest punchRequest = punchRequestRepository.findById(punchRequestId)
+                .orElseThrow(() -> new ProblemException(
+                        HttpStatus.NOT_FOUND,
+                        "PUNCH_REQUEST_NOT_FOUND",
+                        "Punch request not found",
+                        "No punch request found with id: " + punchRequestId
+                ));
+
+        // Validate it belongs to the correct org
+        if (!punchRequest.getOrgId().equals(orgId)) {
+            throw new ProblemException(
+                    HttpStatus.BAD_REQUEST,
+                    "ORG_MISMATCH",
+                    "Organization mismatch",
+                    "Punch request does not belong to org: " + orgId
+            );
+        }
+
+        // 3. Get today's events for validation
+        LocalDate dateKey = dayRollupService.getDateKey(orgId, OffsetDateTime.now());
+        String tz = officePolicyProvider.getOperationalTimezone(orgId);
+        OffsetDateTime dayStart = dateKey.atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
+        OffsetDateTime dayEnd = dateKey.plusDays(1).atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
+
+        List<AttendanceEvent> todayEvents = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
+                orgId, accountId, dayStart, dayEnd
+        );
+
+        // 4. Validate using AcceptanceRules
+        AcceptanceRules.ValidationResult validation = acceptanceRules.validatePunched(punchRequest, todayEvents);
+
+        // 5. Create AttendanceEvent for PUNCHED
+        AttendanceEvent event = new AttendanceEvent();
+        event.setOrgId(orgId);
+        event.setAccountId(accountId);
+        event.setEventKind(EventKind.PUNCHED);
+        event.setEventSource(EventSource.SUPERVISOR);
+        event.setEventAction(EventAction.AUTO);
+        event.setTsUtc(OffsetDateTime.now());
+        event.setPunchRequestId(punchRequestId);
+        event.setRequesterAccountId(punchRequest.getRequesterAccountId());
+        event.setSuccess(validation.isSuccess());
+        event.setVerdict(IntegrityVerdict.valueOf(validation.getVerdict()));
+        event.setFailReason(validation.getFailReason());
+        event.setFlags(validation.getFlags());
+
+        // 6. If validation succeeded, mark punch request as FULFILLED
+        if (validation.isSuccess()) {
+            punchRequest.setState(PunchRequest.State.FULFILLED);
+            punchRequestRepository.save(punchRequest);
+        }
+
+        // 7. Save event
+        AttendanceEvent savedEvent = eventRepository.save(event);
+
+        // 8. Update day rollup if successful
+        if (validation.isSuccess()) {
+            List<AttendanceEvent> updatedEvents = new ArrayList<>(todayEvents);
+            updatedEvents.add(savedEvent);
+            dayRollupService.updateDayRollup(orgId, accountId, dateKey, updatedEvents);
+        }
+
+        // 9. Return response
         return mapToResponse(savedEvent);
     }
 
