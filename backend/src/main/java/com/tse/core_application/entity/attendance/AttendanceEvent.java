@@ -4,7 +4,9 @@ import com.tse.core_application.constants.attendance.EventAction;
 import com.tse.core_application.constants.attendance.EventKind;
 import com.tse.core_application.constants.attendance.EventSource;
 import com.tse.core_application.constants.attendance.IntegrityVerdict;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import org.hibernate.annotations.Type;
+import org.hibernate.annotations.TypeDef;
 
 import javax.persistence.*;
 import java.time.OffsetDateTime;
@@ -17,6 +19,7 @@ import java.util.Map;
  */
 @Entity
 @Table(name = "attendance_event")
+@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
 public class AttendanceEvent {
 
     @Id

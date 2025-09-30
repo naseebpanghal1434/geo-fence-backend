@@ -1,7 +1,9 @@
 package com.tse.core_application.entity.attendance;
 
 import com.tse.core_application.constants.attendance.AttendanceStatus;
+import com.vladmihalcea.hibernate.type.json.JsonBinaryType;
 import org.hibernate.annotations.Type;
+import org.hibernate.annotations.TypeDef;
 
 import javax.persistence.*;
 import java.time.LocalDate;
@@ -15,6 +17,7 @@ import java.util.Map;
  */
 @Entity
 @Table(name = "attendance_day")
+@TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
 public class AttendanceDay {
 
     @Id
