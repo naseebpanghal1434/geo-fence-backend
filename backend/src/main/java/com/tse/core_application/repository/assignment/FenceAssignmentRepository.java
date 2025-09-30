@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,4 +38,16 @@ public interface FenceAssignmentRepository extends JpaRepository<FenceAssignment
 
     Optional<FenceAssignment> findByOrgIdAndEntityTypeIdAndEntityIdAndIsDefault(
             Long orgId, Integer entityTypeId, Long entityId, Boolean isDefault);
+
+    List<FenceAssignment> findByOrgIdAndEntityTypeIdAndEntityIdIn(
+            Long orgId, Integer entityTypeId, Collection<Long> entityIds);
+
+    @Query("SELECT fa FROM FenceAssignment fa " +
+           "WHERE fa.orgId = :orgId AND fa.entityTypeId IN :typeIds AND fa.entityId IN :entityIds")
+    List<FenceAssignment> findByOrgIdAndEntityTypeIdInAndEntityIdIn(
+            @Param("orgId") Long orgId,
+            @Param("typeIds") Collection<Integer> typeIds,
+            @Param("entityIds") Collection<Long> entityIds);
+
+    List<FenceAssignment> findByOrgIdAndFenceIdIn(Long orgId, Collection<Long> fenceIds);
 }
