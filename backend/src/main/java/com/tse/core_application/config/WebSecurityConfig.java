@@ -43,6 +43,8 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/api/orgs/*/createGeoFencingPolicy", "/api/orgs/*/getGeoFencePolicy", "/api/orgs/*/updateGeoFencePolicy", "/api/orgs/getAllGeoFencePolicies").permitAll()
                 // Fence endpoints
                 .antMatchers("/api/orgs/*/createFence", "/api/orgs/*/updateFence", "/api/orgs/*/getFence", "/api/allFence").permitAll()
+                // Assignment endpoints
+                .antMatchers("/api/orgs/*/assignFenceToEntity", "/api/orgs/*/getAssignedEntityOfFence").permitAll()
                 .antMatchers("/h2-console/**").permitAll()
                 .anyRequest().authenticated();
 
