@@ -12,7 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class GeoFencingPolicyService {
@@ -131,5 +133,13 @@ public class GeoFencingPolicyService {
         response.setUpdatedAt(policy.getUpdatedDatetime());
         response.setOrgId(orgId);
         return response;
+    }
+
+    @Transactional(readOnly = true)
+    public List<PolicyResponse> getAllPolicies() {
+        List<AttendancePolicy> policies = policyRepository.findAll();
+        return policies.stream()
+            .map(PolicyResponse::fromEntity)
+            .collect(Collectors.toList());
     }
 }
