@@ -50,6 +50,28 @@ public class AttendanceController {
     }
 
     /**
+     * POST /api/orgs/{orgId}/attendance/punched
+     * Process a PUNCHED event (supervisor-triggered punch).
+     */
+    @PostMapping("/punched")
+    @Operation(summary = "Process a PUNCHED event", description = "Fulfill a punch request with PUNCHED event")
+    public ResponseEntity<PunchResponse> processPunched(
+            @Parameter(description = "Organization ID", required = true)
+            @PathVariable("orgId") Long orgId,
+            @Parameter(description = "Account ID", required = true)
+            @RequestParam("accountId") Long accountId,
+            @Parameter(description = "Punch Request ID", required = true)
+            @RequestParam("punchRequestId") Long punchRequestId) {
+
+        logger.info("POST /api/orgs/{}/attendance/punched - accountId={}, punchRequestId={}",
+                orgId, accountId, punchRequestId);
+
+        PunchResponse response = attendanceService.processPunchedEvent(orgId, accountId, punchRequestId);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
      * GET /api/orgs/{orgId}/attendance/today
      * Get today's summary for an account.
      */
