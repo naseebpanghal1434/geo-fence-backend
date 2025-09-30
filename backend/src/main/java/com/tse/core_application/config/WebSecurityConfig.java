@@ -41,6 +41,8 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
                 .antMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/api-docs/**", "/swagger-resources/**", "/webjars/**").permitAll()
                 // Policy endpoints
                 .antMatchers("/api/orgs/*/createGeoFencingPolicy", "/api/orgs/*/getGeoFencePolicy", "/api/orgs/*/updateGeoFencePolicy", "/api/orgs/getAllGeoFencePolicies").permitAll()
+                // Fence endpoints
+                .antMatchers("/api/orgs/*/createFence", "/api/orgs/*/updateFence", "/api/orgs/*/getFence", "/api/allFence").permitAll()
                 .antMatchers("/h2-console/**").permitAll()
                 .anyRequest().authenticated();
 
