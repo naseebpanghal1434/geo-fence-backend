@@ -23,6 +23,7 @@ import com.tse.core_application.repository.policy.AttendancePolicyRepository;
 import com.tse.core_application.repository.punch.PunchRequestRepository;
 import com.tse.core_application.service.membership.MembershipProvider;
 import com.tse.core_application.service.policy.PolicyGate;
+import com.tse.core_application.util.DateTimeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -83,7 +84,7 @@ public class AttendanceService {
      * Process a punch event (CHECK_IN or CHECK_OUT).
      */
     @Transactional
-    public PunchResponse processPunch(long orgId, PunchCreateRequest request) {
+    public PunchResponse processPunch(long orgId, PunchCreateRequest request, String timeZone) {
         // 1. Validate policy is active
         policyGate.assertPolicyActive(orgId);
 
@@ -131,7 +132,7 @@ public class AttendanceService {
                     .filter(e -> request.getIdempotencyKey().equals(e.getIdempotencyKey()))
                     .findFirst();
             if (existing.isPresent()) {
-                return mapToResponse(existing.get());
+                return mapToResponse(existing.get(), timeZone);
             }
         }
 
@@ -158,7 +159,10 @@ public class AttendanceService {
         event.setTsUtc(LocalDateTime.now());
 
         if (request.getClientLocalTs() != null) {
-            event.setClientLocalTs(LocalDateTime.parse(request.getClientLocalTs()));
+            // Convert clientLocalTs from user timezone to server timezone
+            LocalDateTime clientLocalTsUser = LocalDateTime.parse(request.getClientLocalTs());
+            LocalDateTime clientLocalTsServer = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(clientLocalTsUser, timeZone);
+            event.setClientLocalTs(clientLocalTsServer);
         }
         event.setClientTz(request.getClientTz());
 
@@ -195,14 +199,14 @@ public class AttendanceService {
         dayRollupService.updateDayRollup(orgId, request.getAccountId(), dateKey, updatedEvents);
 
         // 12. Return response
-        return mapToResponse(savedEvent);
+        return mapToResponse(savedEvent, timeZone);
     }
 
     /**
      * Process a PUNCHED event (supervisor/manager-triggered punch).
      */
     @Transactional
-    public PunchResponse processPunchedEvent(long orgId, long accountId, long punchRequestId) {
+    public PunchResponse processPunchedEvent(long orgId, long accountId, long punchRequestId, String timeZone) {
         // 1. Validate policy is active
         policyGate.assertPolicyActive(orgId);
 
@@ -270,14 +274,14 @@ public class AttendanceService {
         }
 
         // 9. Return response
-        return mapToResponse(savedEvent);
+        return mapToResponse(savedEvent, timeZone);
     }
 
     /**
      * Get today's summary for an account.
      */
     @Transactional(readOnly = true)
-    public TodaySummaryResponse getTodaySummary(long orgId, long accountId) {
+    public TodaySummaryResponse getTodaySummary(long orgId, long accountId, String timeZone) {
         LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
 
@@ -296,8 +300,13 @@ public class AttendanceService {
 
         if (dayOpt.isPresent()) {
             AttendanceDay day = dayOpt.get();
-            response.setFirstInUtc(day.getFirstInUtc() != null ? day.getFirstInUtc().toString() : null);
-            response.setLastOutUtc(day.getLastOutUtc() != null ? day.getLastOutUtc().toString() : null);
+            // Convert timestamps from server timezone to user timezone
+            response.setFirstInUtc(day.getFirstInUtc() != null
+                ? DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(day.getFirstInUtc(), timeZone).toString()
+                : null);
+            response.setLastOutUtc(day.getLastOutUtc() != null
+                ? DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(day.getLastOutUtc(), timeZone).toString()
+                : null);
             response.setWorkedSeconds(day.getWorkedSeconds());
             response.setBreakSeconds(day.getBreakSeconds());
         } else {
@@ -311,7 +320,7 @@ public class AttendanceService {
 
         // Map events
         List<TodaySummaryResponse.EventSummary> eventSummaries = todayEvents.stream()
-                .map(this::mapToEventSummary)
+                .map(event -> mapToEventSummary(event, timeZone))
                 .collect(Collectors.toList());
         response.setEvents(eventSummaries);
 
@@ -440,13 +449,14 @@ public class AttendanceService {
         return "NOT_STARTED";
     }
 
-    private PunchResponse mapToResponse(AttendanceEvent event) {
+    private PunchResponse mapToResponse(AttendanceEvent event, String timeZone) {
         PunchResponse response = new PunchResponse();
         response.setEventId(event.getId());
         response.setAccountId(event.getAccountId());
         response.setEventKind(event.getEventKind().name());
         response.setEventSource(event.getEventSource().name());
-        response.setTsUtc(event.getTsUtc().toString());
+        // Convert timestamp from server timezone to user timezone
+        response.setTsUtc(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(event.getTsUtc(), timeZone).toString());
         response.setFenceId(event.getFenceId());
         response.setUnderRange(event.getUnderRange());
         response.setSuccess(event.getSuccess());
@@ -456,11 +466,12 @@ public class AttendanceService {
         return response;
     }
 
-    private TodaySummaryResponse.EventSummary mapToEventSummary(AttendanceEvent event) {
+    private TodaySummaryResponse.EventSummary mapToEventSummary(AttendanceEvent event, String timeZone) {
         TodaySummaryResponse.EventSummary summary = new TodaySummaryResponse.EventSummary();
         summary.setEventId(event.getId());
         summary.setEventKind(event.getEventKind().name());
-        summary.setTsUtc(event.getTsUtc().toString());
+        // Convert timestamp from server timezone to user timezone
+        summary.setTsUtc(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(event.getTsUtc(), timeZone).toString());
         summary.setSuccess(event.getSuccess());
         summary.setVerdict(event.getVerdict().name());
         return summary;

@@ -8,6 +8,7 @@ import com.tse.core_application.exception.ProblemException;
 import com.tse.core_application.repository.punch.PunchRequestRepository;
 import com.tse.core_application.service.membership.MembershipProvider;
 import com.tse.core_application.service.policy.PolicyGate;
+import com.tse.core_application.util.DateTimeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -47,7 +48,7 @@ public class PunchRequestService {
     }
 
     @Transactional
-    public PunchRequestViewDto createPunchRequest(long orgId, PunchRequestCreateDto dto) {
+    public PunchRequestViewDto createPunchRequest(long orgId, PunchRequestCreateDto dto, String timeZone) {
         // Check policy active
         policyGate.assertPolicyActive(orgId);
 
@@ -81,13 +82,16 @@ public class PunchRequestService {
             );
         }
 
+        // Convert requested datetime from user timezone to server timezone
+        LocalDateTime requestedTimeUser = dto.getRequestedDateTime();
+        LocalDateTime requestedTimeServer = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(requestedTimeUser, timeZone);
+
         // Validate requested datetime
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime requestedTime = dto.getRequestedDateTime();
 
         // Check not too far in the past
         LocalDateTime minAllowedPast = now.minusMinutes(maxPastSkewMinutes);
-        if (requestedTime.isBefore(minAllowedPast)) {
+        if (requestedTimeServer.isBefore(minAllowedPast)) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_FAILED",
@@ -98,7 +102,7 @@ public class PunchRequestService {
 
         // Check not too far in the future
         LocalDateTime maxAllowedFuture = now.plusDays(maxFutureDays);
-        if (requestedTime.isAfter(maxAllowedFuture)) {
+        if (requestedTimeServer.isAfter(maxAllowedFuture)) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_FAILED",
@@ -113,9 +117,9 @@ public class PunchRequestService {
         request.setEntityTypeId(dto.getEntityTypeId());
         request.setEntityId(dto.getEntityId());
         request.setRequesterAccountId(dto.getRequesterAccountId());
-        request.setRequestedDatetime(requestedTime);
+        request.setRequestedDatetime(requestedTimeServer);
         request.setRespondWithinMinutes(dto.getRespondWithinMinutes());
-        request.setExpiresAt(requestedTime.plusMinutes(dto.getRespondWithinMinutes()));
+        request.setExpiresAt(requestedTimeServer.plusMinutes(dto.getRespondWithinMinutes()));
         request.setState(PunchRequest.State.PENDING);
 
         PunchRequest saved = punchRequestRepository.save(request);
@@ -123,10 +127,10 @@ public class PunchRequestService {
         logger.info("Created punch request {} for org {} targeting {}/{} by requester {}",
                 saved.getId(), orgId, dto.getEntityTypeId(), dto.getEntityId(), dto.getRequesterAccountId());
 
-        return toViewDto(saved, now, Collections.emptyList());
+        return toViewDto(saved, now, Collections.emptyList(), timeZone);
     }
 
-    public List<PunchRequestViewDto> getPendingRequestsForAccounts(long orgId, List<Long> accountIds) {
+    public List<PunchRequestViewDto> getPendingRequestsForAccounts(long orgId, List<Long> accountIds, String timeZone) {
         if (accountIds == null || accountIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -170,14 +174,14 @@ public class PunchRequestService {
                         appliesToAccounts.add(accountId);
                     }
                 }
-                requestMap.put(req.getId(), toViewDto(req, now, appliesToAccounts));
+                requestMap.put(req.getId(), toViewDto(req, now, appliesToAccounts, timeZone));
             }
         }
 
         return new ArrayList<>(requestMap.values());
     }
 
-    public PunchRequestViewDto getPunchRequestById(long orgId, long requestId) {
+    public PunchRequestViewDto getPunchRequestById(long orgId, long requestId, String timeZone) {
         Optional<PunchRequest> requestOpt = punchRequestRepository.findByIdAndOrgId(requestId, orgId);
         if (!requestOpt.isPresent()) {
             throw new ProblemException(
@@ -201,10 +205,10 @@ public class PunchRequestService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        return toViewDto(request, now, Collections.emptyList());
+        return toViewDto(request, now, Collections.emptyList(), timeZone);
     }
 
-    public List<PunchRequestViewDto> getPendingRequestHistory(long orgId, LocalDateTime from, LocalDateTime to, List<Long> accountIds) {
+    public List<PunchRequestViewDto> getPendingRequestHistory(long orgId, LocalDateTime from, LocalDateTime to, List<Long> accountIds, String timeZone) {
         if (accountIds == null || accountIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -216,6 +220,10 @@ public class PunchRequestService {
         if (to == null) {
             to = from.plusDays(1);
         }
+
+        // Convert from/to from user timezone to server timezone
+        LocalDateTime fromServer = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(from, timeZone);
+        LocalDateTime toServer = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(to, timeZone);
 
         // Expand memberships for each account
         Map<Long, Set<EntityRef>> accountToEntities = new HashMap<>();
@@ -237,7 +245,7 @@ public class PunchRequestService {
         // Query for each entity type
         for (Map.Entry<Integer, Set<Long>> entry : entitiesByType.entrySet()) {
             List<PunchRequest> requests = punchRequestRepository.findHistoryForEntities(
-                    orgId, from, to, entry.getKey(), entry.getValue()
+                    orgId, fromServer, toServer, entry.getKey(), entry.getValue()
             );
             allRequests.addAll(requests);
         }
@@ -255,7 +263,7 @@ public class PunchRequestService {
                         appliesToAccounts.add(accountId);
                     }
                 }
-                requestMap.put(req.getId(), toViewDto(req, now, appliesToAccounts));
+                requestMap.put(req.getId(), toViewDto(req, now, appliesToAccounts, timeZone));
             }
         }
 
@@ -282,16 +290,18 @@ public class PunchRequestService {
         return entities;
     }
 
-    private PunchRequestViewDto toViewDto(PunchRequest request, LocalDateTime now, List<Long> appliesToAccountIds) {
+    private PunchRequestViewDto toViewDto(PunchRequest request, LocalDateTime now, List<Long> appliesToAccountIds, String timeZone) {
         PunchRequestViewDto dto = new PunchRequestViewDto();
         dto.setId(request.getId());
         dto.setOrgId(request.getOrgId());
         dto.setEntityTypeId(request.getEntityTypeId());
         dto.setEntityId(request.getEntityId());
         dto.setRequesterAccountId(request.getRequesterAccountId());
-        dto.setRequestedDateTime(request.getRequestedDatetime());
+
+        // Convert timestamps from server timezone to user timezone
+        dto.setRequestedDateTime(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(request.getRequestedDatetime(), timeZone));
         dto.setRespondWithinMinutes(request.getRespondWithinMinutes());
-        dto.setExpiresAt(request.getExpiresAt());
+        dto.setExpiresAt(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(request.getExpiresAt(), timeZone));
         dto.setState(request.getState().name());
 
         // Compute activeNow and secondsRemaining

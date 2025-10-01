@@ -65,7 +65,7 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " processPunch" + '"' + " method ...");
 
         try {
-            PunchResponse response = attendanceService.processPunch(orgId, request);
+            PunchResponse response = attendanceService.processPunch(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " processPunch" + '"' + " method because completed successfully ...");
@@ -110,7 +110,7 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " processPunched" + '"' + " method ...");
 
         try {
-            PunchResponse response = attendanceService.processPunchedEvent(orgId, accountId, punchRequestId);
+            PunchResponse response = attendanceService.processPunchedEvent(orgId, accountId, punchRequestId, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " processPunched" + '"' + " method because completed successfully ...");
@@ -153,7 +153,7 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " getTodaySummary" + '"' + " method ...");
 
         try {
-            TodaySummaryResponse response = attendanceService.getTodaySummary(orgId, accountId);
+            TodaySummaryResponse response = attendanceService.getTodaySummary(orgId, accountId, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getTodaySummary" + '"' + " method because completed successfully ...");
