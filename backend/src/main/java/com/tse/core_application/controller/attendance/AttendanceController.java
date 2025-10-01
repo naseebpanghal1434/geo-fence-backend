@@ -1,9 +1,11 @@
 package com.tse.core_application.controller.attendance;
 
 import com.tse.core_application.dto.attendance.PunchCreateRequest;
+import com.tse.core_application.dto.attendance.PunchedEventRequest;
 import com.tse.core_application.dto.attendance.PunchResponse;
 import com.tse.core_application.dto.attendance.TodaySummaryResponse;
 import com.tse.core_application.service.attendance.AttendanceService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +19,7 @@ import com.tse.core_application.DummyClasses.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.ThreadContext;
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
 
 /**
  * Phase 6b: REST controller for attendance operations (CHECK_IN/OUT).
@@ -31,12 +34,15 @@ public class AttendanceController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final AttendanceService attendanceService;
+    private final GeoFencingAccessService geoFencingAccessService;
 
-    public AttendanceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler, AttendanceService attendanceService) {
+    public AttendanceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
+                               AttendanceService attendanceService, GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.attendanceService = attendanceService;
+        this.geoFencingAccessService = geoFencingAccessService;
     }
 
     /**
@@ -65,6 +71,9 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " processPunch" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PunchResponse response = attendanceService.processPunch(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -91,10 +100,8 @@ public class AttendanceController {
     public ResponseEntity<Object> processPunched(
             @Parameter(description = "Organization ID", required = true)
             @PathVariable("orgId") Long orgId,
-            @Parameter(description = "Account ID", required = true)
-            @RequestParam("accountId") Long accountId,
-            @Parameter(description = "Punch Request ID", required = true)
-            @RequestParam("punchRequestId") Long punchRequestId,
+            @Parameter(description = "Punched event request", required = true)
+            @Valid @RequestBody PunchedEventRequest request,
             @RequestHeader(name = "screenName") String screenName,
             @RequestHeader(name = "timeZone") String timeZone,
             @RequestHeader(name = "accountIds") String accountIds,
@@ -110,7 +117,10 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " processPunched" + '"' + " method ...");
 
         try {
-            PunchResponse response = attendanceService.processPunchedEvent(orgId, accountId, punchRequestId, timeZone);
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
+            PunchResponse response = attendanceService.processPunchedEvent(orgId, request.getAccountId(), request.getPunchRequestId(), timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " processPunched" + '"' + " method because completed successfully ...");
@@ -153,6 +163,9 @@ public class AttendanceController {
         logger.info("Entered" + '"' + " getTodaySummary" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             TodaySummaryResponse response = attendanceService.getTodaySummary(orgId, accountId, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
