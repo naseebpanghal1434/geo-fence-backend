@@ -25,7 +25,7 @@ public class GeoFenceService {
     }
 
     @Transactional
-    public FenceResponse createFence(Long orgId, FenceCreateRequest request) {
+    public FenceResponse createFence(Long orgId, FenceCreateRequest request, String timeZone) {
         GeoFence fence = new GeoFence();
         fence.setOrgId(orgId);
         fence.setName(request.getName());
@@ -42,11 +42,11 @@ public class GeoFenceService {
         }
 
         fence = fenceRepository.save(fence);
-        return FenceResponse.fromEntity(fence);
+        return FenceResponse.fromEntity(fence, timeZone);
     }
 
     @Transactional
-    public FenceResponse updateFence(Long orgId, FenceUpdateRequest request) {
+    public FenceResponse updateFence(Long orgId, FenceUpdateRequest request, String timeZone) {
         GeoFence fence = fenceRepository.findByIdAndOrgId(request.getId(), orgId)
             .orElseThrow(() -> new FenceNotFoundException(request.getId(), orgId));
 
@@ -65,11 +65,11 @@ public class GeoFenceService {
         }
 
         fence = fenceRepository.save(fence);
-        return FenceResponse.fromEntity(fence);
+        return FenceResponse.fromEntity(fence, timeZone);
     }
 
     @Transactional(readOnly = true)
-    public List<FenceResponse> listFences(Long orgId, String status, String q, String siteCode) {
+    public List<FenceResponse> listFences(Long orgId, String status, String q, String siteCode, String timeZone) {
         Specification<GeoFence> spec = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -103,15 +103,15 @@ public class GeoFenceService {
 
         List<GeoFence> fences = fenceRepository.findAll(spec);
         return fences.stream()
-            .map(FenceResponse::fromEntity)
+            .map(fence -> FenceResponse.fromEntity(fence, timeZone))
             .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public List<FenceResponse> getAllFences() {
+    public List<FenceResponse> getAllFences(String timeZone) {
         List<GeoFence> fences = fenceRepository.findAll();
         return fences.stream()
-            .map(FenceResponse::fromEntity)
+            .map(fence -> FenceResponse.fromEntity(fence, timeZone))
             .collect(Collectors.toList());
     }
 }

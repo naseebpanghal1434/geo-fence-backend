@@ -26,7 +26,7 @@ public class GeoFencingPolicyService {
     }
 
     @Transactional
-    public PolicyResponse createPolicy(Long orgId, PolicyCreateRequest request) {
+    public PolicyResponse createPolicy(Long orgId, PolicyCreateRequest request, String timeZone) {
         // Check if policy already exists (idempotent)
         Optional<AttendancePolicy> existing = policyRepository.findByOrgId(orgId);
         if (existing.isPresent()) {
@@ -69,15 +69,15 @@ public class GeoFencingPolicyService {
     }
 
     @Transactional(readOnly = true)
-    public PolicyResponse getPolicy(Long orgId) {
+    public PolicyResponse getPolicy(Long orgId, String timeZone) {
         AttendancePolicy policy = policyRepository.findByOrgId(orgId)
             .orElseThrow(() -> new PolicyNotFoundException(orgId));
 
-        return PolicyResponse.fromEntity(policy);
+        return PolicyResponse.fromEntity(policy, timeZone);
     }
 
     @Transactional
-    public PolicyResponse updatePolicy(Long orgId, PolicyUpdateRequest request) {
+    public PolicyResponse updatePolicy(Long orgId, PolicyUpdateRequest request, String timeZone) {
         AttendancePolicy policy = policyRepository.findByOrgId(orgId)
             .orElseThrow(() -> new PolicyNotFoundException(orgId));
 
@@ -136,10 +136,10 @@ public class GeoFencingPolicyService {
     }
 
     @Transactional(readOnly = true)
-    public List<PolicyResponse> getAllPolicies() {
+    public List<PolicyResponse> getAllPolicies(String timeZone) {
         List<AttendancePolicy> policies = policyRepository.findAll();
         return policies.stream()
-            .map(PolicyResponse::fromEntity)
+            .map(policy -> PolicyResponse.fromEntity(policy, timeZone))
             .collect(Collectors.toList());
     }
 }

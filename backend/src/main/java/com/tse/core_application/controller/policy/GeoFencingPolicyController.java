@@ -58,7 +58,7 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " createPolicy" + '"' + " method ...");
 
         try {
-            PolicyResponse response = policyService.createPolicy(orgId, request);
+            PolicyResponse response = policyService.createPolicy(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " createPolicy" + '"' + " method because completed successfully ...");
@@ -99,7 +99,7 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " getPolicy" + '"' + " method ...");
 
         try {
-            PolicyResponse response = policyService.getPolicy(orgId);
+            PolicyResponse response = policyService.getPolicy(orgId, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getPolicy" + '"' + " method because completed successfully ...");
@@ -136,7 +136,7 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " updatePolicy" + '"' + " method ...");
 
         try {
-            PolicyResponse response = policyService.updatePolicy(orgId, request);
+            PolicyResponse response = policyService.updatePolicy(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " updatePolicy" + '"' + " method because completed successfully ...");
@@ -171,7 +171,7 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " getAllPolicies" + '"' + " method ...");
 
         try {
-            List<PolicyResponse> policies = policyService.getAllPolicies();
+            List<PolicyResponse> policies = policyService.getAllPolicies(timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getAllPolicies" + '"' + " method because completed successfully ...");

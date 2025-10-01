@@ -58,7 +58,7 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " createFence" + '"' + " method ...");
 
         try {
-            FenceResponse response = fenceService.createFence(orgId, request);
+            FenceResponse response = fenceService.createFence(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " createFence" + '"' + " method because completed successfully ...");
@@ -95,7 +95,7 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " updateFence" + '"' + " method ...");
 
         try {
-            FenceResponse response = fenceService.updateFence(orgId, request);
+            FenceResponse response = fenceService.updateFence(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " updateFence" + '"' + " method because completed successfully ...");
@@ -134,7 +134,7 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " getFences" + '"' + " method ...");
 
         try {
-            List<FenceResponse> fences = fenceService.listFences(orgId, status, q, siteCode);
+            List<FenceResponse> fences = fenceService.listFences(orgId, status, q, siteCode, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getFences" + '"' + " method because completed successfully ...");
@@ -169,7 +169,7 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " getAllFences" + '"' + " method ...");
 
         try {
-            List<FenceResponse> fences = fenceService.getAllFences();
+            List<FenceResponse> fences = fenceService.getAllFences(timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getAllFences" + '"' + " method because completed successfully ...");
