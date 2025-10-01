@@ -4,6 +4,7 @@ import com.tse.core_application.dto.policy.PolicyCreateRequest;
 import com.tse.core_application.dto.policy.PolicyResponse;
 import com.tse.core_application.dto.policy.PolicyUpdateRequest;
 import com.tse.core_application.service.policy.GeoFencingPolicyService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import com.tse.core_application.DummyClasses.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,13 +27,18 @@ public class GeoFencingPolicyController {
     private static final Logger logger = LogManager.getLogger(GeoFencingPolicyController.class);
 
     private final GeoFencingPolicyService policyService;
+    private final GeoFencingAccessService geoFencingAccessService;
     private final JwtUtil jwtUtil;
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
 
-    public GeoFencingPolicyController(GeoFencingPolicyService policyService, JwtUtil jwtUtil,
-                                     UserService userService, RequestHeaderHandler requestHeaderHandler) {
+    public GeoFencingPolicyController(GeoFencingPolicyService policyService,
+                                     GeoFencingAccessService geoFencingAccessService,
+                                     JwtUtil jwtUtil,
+                                     UserService userService,
+                                     RequestHeaderHandler requestHeaderHandler) {
         this.policyService = policyService;
+        this.geoFencingAccessService = geoFencingAccessService;
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
@@ -58,6 +64,9 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " createPolicy" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PolicyResponse response = policyService.createPolicy(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -99,6 +108,9 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " getPolicy" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PolicyResponse response = policyService.getPolicy(orgId, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -136,6 +148,9 @@ public class GeoFencingPolicyController {
         logger.info("Entered" + '"' + " updatePolicy" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PolicyResponse response = policyService.updatePolicy(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));

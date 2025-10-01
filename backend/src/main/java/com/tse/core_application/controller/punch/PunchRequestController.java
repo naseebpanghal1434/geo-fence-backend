@@ -3,6 +3,7 @@ package com.tse.core_application.controller.punch;
 import com.tse.core_application.dto.punch.PunchRequestCreateDto;
 import com.tse.core_application.dto.punch.PunchRequestViewDto;
 import com.tse.core_application.service.punch.PunchRequestService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,12 +35,15 @@ public class PunchRequestController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final PunchRequestService punchRequestService;
+    private final GeoFencingAccessService geoFencingAccessService;
 
-    public PunchRequestController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler, PunchRequestService punchRequestService) {
+    public PunchRequestController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
+                                  PunchRequestService punchRequestService, GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.punchRequestService = punchRequestService;
+        this.geoFencingAccessService = geoFencingAccessService;
     }
 
     @PostMapping("/{orgId}/requestPunchForEntity")
@@ -70,6 +74,9 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " createPunchRequest" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PunchRequestViewDto result = punchRequestService.createPunchRequest(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -117,6 +124,9 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPendingRequests" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             List<PunchRequestViewDto> results = punchRequestService.getPendingRequestsForAccounts(orgId, accountIds, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -163,6 +173,9 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPunchRequestById" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             PunchRequestViewDto result = punchRequestService.getPunchRequestById(orgId, id, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -220,6 +233,9 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPendingRequestHistory" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             List<PunchRequestViewDto> results = punchRequestService.getPendingRequestHistory(orgId, from, to, accountIds, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));

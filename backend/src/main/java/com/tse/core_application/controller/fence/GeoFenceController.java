@@ -4,6 +4,7 @@ import com.tse.core_application.dto.fence.FenceCreateRequest;
 import com.tse.core_application.dto.fence.FenceResponse;
 import com.tse.core_application.dto.fence.FenceUpdateRequest;
 import com.tse.core_application.service.fence.GeoFenceService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,12 +31,15 @@ public class GeoFenceController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final GeoFenceService fenceService;
+    private final GeoFencingAccessService geoFencingAccessService;
 
-    public GeoFenceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler, GeoFenceService fenceService) {
+    public GeoFenceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
+                             GeoFenceService fenceService, GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.fenceService = fenceService;
+        this.geoFencingAccessService = geoFencingAccessService;
     }
 
     @PostMapping("/orgs/{orgId}/createFence")
@@ -58,6 +62,9 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " createFence" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             FenceResponse response = fenceService.createFence(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -95,6 +102,9 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " updateFence" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             FenceResponse response = fenceService.updateFence(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -134,6 +144,9 @@ public class GeoFenceController {
         logger.info("Entered" + '"' + " getFences" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             List<FenceResponse> fences = fenceService.listFences(orgId, status, q, siteCode, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
