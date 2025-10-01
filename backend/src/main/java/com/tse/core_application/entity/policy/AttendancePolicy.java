@@ -1,10 +1,21 @@
 package com.tse.core_application.entity.policy;
 
 import javax.persistence.*;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "attendance_policy")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class AttendancePolicy {
 
     @Id
@@ -83,24 +94,16 @@ public class AttendancePolicy {
     @Column(name = "created_by")
     private Long createdBy;
 
+    @CreationTimestamp
     @Column(name = "created_datetime", nullable = false, updatable = false)
-    private OffsetDateTime createdDatetime;
+    private LocalDateTime createdDatetime;
 
     @Column(name = "updated_by")
     private Long updatedBy;
 
-    @Column(name = "updated_datetime")
-    private OffsetDateTime updatedDatetime;
-
-    @PrePersist
-    protected void onCreate() {
-        createdDatetime = OffsetDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedDatetime = OffsetDateTime.now();
-    }
+    @UpdateTimestamp
+    @Column(name = "updated_datetime", insertable = false)
+    private LocalDateTime updatedDatetime;
 
     // Enums
     public enum OutsideFencePolicy {
@@ -109,206 +112,5 @@ public class AttendancePolicy {
 
     public enum IntegrityPosture {
         WARN, BLOCK
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(Long orgId) {
-        this.orgId = orgId;
-    }
-
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-
-    public OutsideFencePolicy getOutsideFencePolicy() {
-        return outsideFencePolicy;
-    }
-
-    public void setOutsideFencePolicy(OutsideFencePolicy outsideFencePolicy) {
-        this.outsideFencePolicy = outsideFencePolicy;
-    }
-
-    public IntegrityPosture getIntegrityPosture() {
-        return integrityPosture;
-    }
-
-    public void setIntegrityPosture(IntegrityPosture integrityPosture) {
-        this.integrityPosture = integrityPosture;
-    }
-
-    public Integer getAllowCheckinBeforeStartMin() {
-        return allowCheckinBeforeStartMin;
-    }
-
-    public void setAllowCheckinBeforeStartMin(Integer allowCheckinBeforeStartMin) {
-        this.allowCheckinBeforeStartMin = allowCheckinBeforeStartMin;
-    }
-
-    public Integer getLateCheckinAfterStartMin() {
-        return lateCheckinAfterStartMin;
-    }
-
-    public void setLateCheckinAfterStartMin(Integer lateCheckinAfterStartMin) {
-        this.lateCheckinAfterStartMin = lateCheckinAfterStartMin;
-    }
-
-    public Integer getAllowCheckoutBeforeEndMin() {
-        return allowCheckoutBeforeEndMin;
-    }
-
-    public void setAllowCheckoutBeforeEndMin(Integer allowCheckoutBeforeEndMin) {
-        this.allowCheckoutBeforeEndMin = allowCheckoutBeforeEndMin;
-    }
-
-    public Integer getMaxCheckoutAfterEndMin() {
-        return maxCheckoutAfterEndMin;
-    }
-
-    public void setMaxCheckoutAfterEndMin(Integer maxCheckoutAfterEndMin) {
-        this.maxCheckoutAfterEndMin = maxCheckoutAfterEndMin;
-    }
-
-    public Integer getNotifyBeforeShiftStartMin() {
-        return notifyBeforeShiftStartMin;
-    }
-
-    public void setNotifyBeforeShiftStartMin(Integer notifyBeforeShiftStartMin) {
-        this.notifyBeforeShiftStartMin = notifyBeforeShiftStartMin;
-    }
-
-    public Integer getFenceRadiusM() {
-        return fenceRadiusM;
-    }
-
-    public void setFenceRadiusM(Integer fenceRadiusM) {
-        this.fenceRadiusM = fenceRadiusM;
-    }
-
-    public Integer getAccuracyGateM() {
-        return accuracyGateM;
-    }
-
-    public void setAccuracyGateM(Integer accuracyGateM) {
-        this.accuracyGateM = accuracyGateM;
-    }
-
-    public Integer getCooldownSeconds() {
-        return cooldownSeconds;
-    }
-
-    public void setCooldownSeconds(Integer cooldownSeconds) {
-        this.cooldownSeconds = cooldownSeconds;
-    }
-
-    public Integer getMaxSuccessfulPunchesPerDay() {
-        return maxSuccessfulPunchesPerDay;
-    }
-
-    public void setMaxSuccessfulPunchesPerDay(Integer maxSuccessfulPunchesPerDay) {
-        this.maxSuccessfulPunchesPerDay = maxSuccessfulPunchesPerDay;
-    }
-
-    public Integer getMaxFailedPunchesPerDay() {
-        return maxFailedPunchesPerDay;
-    }
-
-    public void setMaxFailedPunchesPerDay(Integer maxFailedPunchesPerDay) {
-        this.maxFailedPunchesPerDay = maxFailedPunchesPerDay;
-    }
-
-    public Integer getMaxWorkingHoursPerDay() {
-        return maxWorkingHoursPerDay;
-    }
-
-    public void setMaxWorkingHoursPerDay(Integer maxWorkingHoursPerDay) {
-        this.maxWorkingHoursPerDay = maxWorkingHoursPerDay;
-    }
-
-    public Integer getDwellInMin() {
-        return dwellInMin;
-    }
-
-    public void setDwellInMin(Integer dwellInMin) {
-        this.dwellInMin = dwellInMin;
-    }
-
-    public Integer getDwellOutMin() {
-        return dwellOutMin;
-    }
-
-    public void setDwellOutMin(Integer dwellOutMin) {
-        this.dwellOutMin = dwellOutMin;
-    }
-
-    public Boolean getAutoOutEnabled() {
-        return autoOutEnabled;
-    }
-
-    public void setAutoOutEnabled(Boolean autoOutEnabled) {
-        this.autoOutEnabled = autoOutEnabled;
-    }
-
-    public Integer getAutoOutDelayMin() {
-        return autoOutDelayMin;
-    }
-
-    public void setAutoOutDelayMin(Integer autoOutDelayMin) {
-        this.autoOutDelayMin = autoOutDelayMin;
-    }
-
-    public Integer getUndoWindowMin() {
-        return undoWindowMin;
-    }
-
-    public void setUndoWindowMin(Integer undoWindowMin) {
-        this.undoWindowMin = undoWindowMin;
-    }
-
-    public Long getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public OffsetDateTime getCreatedDatetime() {
-        return createdDatetime;
-    }
-
-    public void setCreatedDatetime(OffsetDateTime createdDatetime) {
-        this.createdDatetime = createdDatetime;
-    }
-
-    public Long getUpdatedBy() {
-        return updatedBy;
-    }
-
-    public void setUpdatedBy(Long updatedBy) {
-        this.updatedBy = updatedBy;
-    }
-
-    public OffsetDateTime getUpdatedDatetime() {
-        return updatedDatetime;
-    }
-
-    public void setUpdatedDatetime(OffsetDateTime updatedDatetime) {
-        this.updatedDatetime = updatedDatetime;
     }
 }

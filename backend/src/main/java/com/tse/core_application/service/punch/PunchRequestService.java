@@ -16,8 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -83,11 +82,11 @@ public class PunchRequestService {
         }
 
         // Validate requested datetime
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        OffsetDateTime requestedTime = dto.getRequestedDateTime().withOffsetSameInstant(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime requestedTime = dto.getRequestedDateTime();
 
         // Check not too far in the past
-        OffsetDateTime minAllowedPast = now.minusMinutes(maxPastSkewMinutes);
+        LocalDateTime minAllowedPast = now.minusMinutes(maxPastSkewMinutes);
         if (requestedTime.isBefore(minAllowedPast)) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
@@ -98,7 +97,7 @@ public class PunchRequestService {
         }
 
         // Check not too far in the future
-        OffsetDateTime maxAllowedFuture = now.plusDays(maxFutureDays);
+        LocalDateTime maxAllowedFuture = now.plusDays(maxFutureDays);
         if (requestedTime.isAfter(maxAllowedFuture)) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
@@ -132,7 +131,7 @@ public class PunchRequestService {
             return Collections.emptyList();
         }
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now();
 
         // Expand memberships for each account
         Map<Long, Set<EntityRef>> accountToEntities = new HashMap<>();
@@ -201,18 +200,18 @@ public class PunchRequestService {
             );
         }
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now();
         return toViewDto(request, now, Collections.emptyList());
     }
 
-    public List<PunchRequestViewDto> getPendingRequestHistory(long orgId, OffsetDateTime from, OffsetDateTime to, List<Long> accountIds) {
+    public List<PunchRequestViewDto> getPendingRequestHistory(long orgId, LocalDateTime from, LocalDateTime to, List<Long> accountIds) {
         if (accountIds == null || accountIds.isEmpty()) {
             return Collections.emptyList();
         }
 
         // Default to today if not specified
         if (from == null) {
-            from = OffsetDateTime.now(ZoneOffset.UTC).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            from = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
         }
         if (to == null) {
             to = from.plusDays(1);
@@ -244,7 +243,7 @@ public class PunchRequestService {
         }
 
         // De-duplicate and map to DTOs
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        LocalDateTime now = LocalDateTime.now();
         Map<Long, PunchRequestViewDto> requestMap = new HashMap<>();
         for (PunchRequest req : allRequests) {
             if (!requestMap.containsKey(req.getId())) {
@@ -283,7 +282,7 @@ public class PunchRequestService {
         return entities;
     }
 
-    private PunchRequestViewDto toViewDto(PunchRequest request, OffsetDateTime now, List<Long> appliesToAccountIds) {
+    private PunchRequestViewDto toViewDto(PunchRequest request, LocalDateTime now, List<Long> appliesToAccountIds) {
         PunchRequestViewDto dto = new PunchRequestViewDto();
         dto.setId(request.getId());
         dto.setOrgId(request.getOrgId());

@@ -70,15 +70,15 @@ public class DayRollupService {
             return;
         }
 
-        OffsetDateTime firstIn = null;
-        OffsetDateTime lastOut = null;
+        LocalDateTime firstIn = null;
+        LocalDateTime lastOut = null;
         int workedSeconds = 0;
         int breakSeconds = 0;
         Map<String, Object> anomalies = new HashMap<>();
 
         // State tracking
-        OffsetDateTime currentCheckinTime = null;
-        OffsetDateTime currentBreakStartTime = null;
+        LocalDateTime currentCheckinTime = null;
+        LocalDateTime currentBreakStartTime = null;
 
         for (AttendanceEvent event : events) {
             if (!event.getSuccess()) {
@@ -120,14 +120,14 @@ public class DayRollupService {
         // Handle incomplete state
         if (currentCheckinTime != null) {
             // Still checked in - compute worked time until now
-            long seconds = Duration.between(currentCheckinTime, OffsetDateTime.now()).getSeconds();
+            long seconds = Duration.between(currentCheckinTime, LocalDateTime.now()).getSeconds();
             workedSeconds += seconds;
             anomalies.put("still_checked_in", true);
         }
 
         if (currentBreakStartTime != null) {
             // Still on break
-            long seconds = Duration.between(currentBreakStartTime, OffsetDateTime.now()).getSeconds();
+            long seconds = Duration.between(currentBreakStartTime, LocalDateTime.now()).getSeconds();
             breakSeconds += seconds;
             anomalies.put("still_on_break", true);
         }
@@ -157,8 +157,8 @@ public class DayRollupService {
      * @param ts    Timestamp
      * @return Date key (LocalDate in operational timezone)
      */
-    public LocalDate getDateKey(long orgId, OffsetDateTime ts) {
+    public LocalDate getDateKey(long orgId, LocalDateTime ts) {
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
-        return ts.atZoneSameInstant(ZoneId.of(tz)).toLocalDate();
+        return ts.atZone(ZoneId.of(tz)).toLocalDate();
     }
 }

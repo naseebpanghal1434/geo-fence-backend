@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.tse.core_application.entity.fence.GeoFence;
 import com.tse.core_application.entity.fence.GeoFence.LocationKind;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FenceResponse {
@@ -20,9 +20,9 @@ public class FenceResponse {
     private Integer radiusM;
     private Boolean isActive;
     private Long createdBy;
-    private OffsetDateTime createdDatetime;
+    private LocalDateTime createdDatetime;
     private Long updatedBy;
-    private OffsetDateTime updatedDatetime;
+    private LocalDateTime updatedDatetime;
 
     public FenceResponse() {
     }
@@ -135,11 +135,11 @@ public class FenceResponse {
         this.createdBy = createdBy;
     }
 
-    public OffsetDateTime getCreatedDatetime() {
+    public LocalDateTime getCreatedDatetime() {
         return createdDatetime;
     }
 
-    public void setCreatedDatetime(OffsetDateTime createdDatetime) {
+    public void setCreatedDatetime(LocalDateTime createdDatetime) {
         this.createdDatetime = createdDatetime;
     }
 
@@ -151,11 +151,11 @@ public class FenceResponse {
         this.updatedBy = updatedBy;
     }
 
-    public OffsetDateTime getUpdatedDatetime() {
+    public LocalDateTime getUpdatedDatetime() {
         return updatedDatetime;
     }
 
-    public void setUpdatedDatetime(OffsetDateTime updatedDatetime) {
+    public void setUpdatedDatetime(LocalDateTime updatedDatetime) {
         this.updatedDatetime = updatedDatetime;
     }
 }

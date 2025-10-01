@@ -2,7 +2,7 @@ package com.tse.core_application.dto.punch;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,13 +27,13 @@ public class PunchRequestViewDto {
     private Long requesterAccountId;
 
     @JsonProperty("requestedDateTime")
-    private OffsetDateTime requestedDateTime;
+    private LocalDateTime requestedDateTime;
 
     @JsonProperty("respondWithinMinutes")
     private Integer respondWithinMinutes;
 
     @JsonProperty("expiresAt")
-    private OffsetDateTime expiresAt;
+    private LocalDateTime expiresAt;
 
     @JsonProperty("state")
     private String state; // PENDING/FULFILLED/EXPIRED/CANCELLED
@@ -90,11 +90,11 @@ public class PunchRequestViewDto {
         this.requesterAccountId = requesterAccountId;
     }
 
-    public OffsetDateTime getRequestedDateTime() {
+    public LocalDateTime getRequestedDateTime() {
         return requestedDateTime;
     }
 
-    public void setRequestedDateTime(OffsetDateTime requestedDateTime) {
+    public void setRequestedDateTime(LocalDateTime requestedDateTime) {
         this.requestedDateTime = requestedDateTime;
     }
 
@@ -106,11 +106,11 @@ public class PunchRequestViewDto {
         this.respondWithinMinutes = respondWithinMinutes;
     }
 
-    public OffsetDateTime getExpiresAt() {
+    public LocalDateTime getExpiresAt() {
         return expiresAt;
     }
 
-    public void setExpiresAt(OffsetDateTime expiresAt) {
+    public void setExpiresAt(LocalDateTime expiresAt) {
         this.expiresAt = expiresAt;
     }
 

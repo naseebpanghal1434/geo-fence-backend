@@ -116,10 +116,10 @@ public class AttendanceService {
         GeoFence fence = getDefaultFenceForUser(orgId, request.getAccountId());
 
         // 6. Get today's events for validation
-        LocalDate dateKey = dayRollupService.getDateKey(orgId, OffsetDateTime.now());
+        LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
-        OffsetDateTime dayStart = dateKey.atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
-        OffsetDateTime dayEnd = dateKey.plusDays(1).atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
+        LocalDateTime dayStart = dateKey.atStartOfDay();
+        LocalDateTime dayEnd = dateKey.plusDays(1).atStartOfDay();
 
         List<AttendanceEvent> todayEvents = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
                 orgId, request.getAccountId(), dayStart, dayEnd
@@ -155,10 +155,10 @@ public class AttendanceService {
         event.setEventKind(eventKind);
         event.setEventSource(EventSource.GEOFENCE);
         event.setEventAction(EventAction.MANUAL);
-        event.setTsUtc(OffsetDateTime.now());
+        event.setTsUtc(LocalDateTime.now());
 
         if (request.getClientLocalTs() != null) {
-            event.setClientLocalTs(OffsetDateTime.parse(request.getClientLocalTs()));
+            event.setClientLocalTs(LocalDateTime.parse(request.getClientLocalTs()));
         }
         event.setClientTz(request.getClientTz());
 
@@ -226,10 +226,10 @@ public class AttendanceService {
         }
 
         // 3. Get today's events for validation
-        LocalDate dateKey = dayRollupService.getDateKey(orgId, OffsetDateTime.now());
+        LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
-        OffsetDateTime dayStart = dateKey.atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
-        OffsetDateTime dayEnd = dateKey.plusDays(1).atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
+        LocalDateTime dayStart = dateKey.atStartOfDay();
+        LocalDateTime dayEnd = dateKey.plusDays(1).atStartOfDay();
 
         List<AttendanceEvent> todayEvents = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
                 orgId, accountId, dayStart, dayEnd
@@ -245,7 +245,7 @@ public class AttendanceService {
         event.setEventKind(EventKind.PUNCHED);
         event.setEventSource(EventSource.SUPERVISOR);
         event.setEventAction(EventAction.AUTO);
-        event.setTsUtc(OffsetDateTime.now());
+        event.setTsUtc(LocalDateTime.now());
         event.setPunchRequestId(punchRequestId);
         event.setRequesterAccountId(punchRequest.getRequesterAccountId());
         event.setSuccess(validation.isSuccess());
@@ -278,11 +278,11 @@ public class AttendanceService {
      */
     @Transactional(readOnly = true)
     public TodaySummaryResponse getTodaySummary(long orgId, long accountId) {
-        LocalDate dateKey = dayRollupService.getDateKey(orgId, OffsetDateTime.now());
+        LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
 
-        OffsetDateTime dayStart = dateKey.atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
-        OffsetDateTime dayEnd = dateKey.plusDays(1).atStartOfDay(ZoneId.of(tz)).toOffsetDateTime();
+        LocalDateTime dayStart = dateKey.atStartOfDay();
+        LocalDateTime dayEnd = dateKey.plusDays(1).atStartOfDay();
 
         List<AttendanceEvent> todayEvents = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
                 orgId, accountId, dayStart, dayEnd

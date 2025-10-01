@@ -5,7 +5,7 @@ import com.tse.core_application.entity.policy.AttendancePolicy;
 import com.tse.core_application.entity.policy.AttendancePolicy.IntegrityPosture;
 import com.tse.core_application.entity.policy.AttendancePolicy.OutsideFencePolicy;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class PolicyResponse {
@@ -14,7 +14,7 @@ public class PolicyResponse {
     private Long orgId;
     private String status;
     private Boolean defaultsApplied;
-    private OffsetDateTime updatedAt;
+    private LocalDateTime updatedAt;
 
     // Full policy fields
     private Boolean isActive;
@@ -43,9 +43,9 @@ public class PolicyResponse {
     private Integer undoWindowMin;
 
     private Long createdBy;
-    private OffsetDateTime createdDatetime;
+    private LocalDateTime createdDatetime;
     private Long updatedBy;
-    private OffsetDateTime updatedDatetime;
+    private LocalDateTime updatedDatetime;
 
     public PolicyResponse() {
     }
@@ -114,11 +114,11 @@ public class PolicyResponse {
         this.defaultsApplied = defaultsApplied;
     }
 
-    public OffsetDateTime getUpdatedAt() {
+    public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
+    public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
 
@@ -282,11 +282,11 @@ public class PolicyResponse {
         this.createdBy = createdBy;
     }
 
-    public OffsetDateTime getCreatedDatetime() {
+    public LocalDateTime getCreatedDatetime() {
         return createdDatetime;
     }
 
-    public void setCreatedDatetime(OffsetDateTime createdDatetime) {
+    public void setCreatedDatetime(LocalDateTime createdDatetime) {
         this.createdDatetime = createdDatetime;
     }
 
@@ -298,11 +298,11 @@ public class PolicyResponse {
         this.updatedBy = updatedBy;
     }
 
-    public OffsetDateTime getUpdatedDatetime() {
+    public LocalDateTime getUpdatedDatetime() {
         return updatedDatetime;
     }
 
-    public void setUpdatedDatetime(OffsetDateTime updatedDatetime) {
+    public void setUpdatedDatetime(LocalDateTime updatedDatetime) {
         this.updatedDatetime = updatedDatetime;
     }
 }

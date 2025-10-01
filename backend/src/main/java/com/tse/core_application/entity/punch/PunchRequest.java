@@ -1,7 +1,14 @@
 package com.tse.core_application.entity.punch;
 
 import javax.persistence.*;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /**
  * Represents a punch request created by a manager/admin targeting a user, team, project, or org.
@@ -9,6 +16,10 @@ import java.time.OffsetDateTime;
  */
 @Entity
 @Table(name = "punch_request")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class PunchRequest {
 
     @Id
@@ -28,128 +39,30 @@ public class PunchRequest {
     private Long requesterAccountId;
 
     @Column(name = "requested_datetime", nullable = false)
-    private OffsetDateTime requestedDatetime;
+    private LocalDateTime requestedDatetime;
 
     @Column(name = "respond_within_minutes", nullable = false)
     private Integer respondWithinMinutes;
 
     @Column(name = "expires_at", nullable = false)
-    private OffsetDateTime expiresAt;
+    private LocalDateTime expiresAt;
 
     @Column(name = "state", nullable = false)
     @Enumerated(EnumType.STRING)
     private State state = State.PENDING;
 
+    @CreationTimestamp
     @Column(name = "created_datetime", nullable = false, updatable = false)
-    private OffsetDateTime createdDatetime;
+    private LocalDateTime createdDatetime;
 
-    @Column(name = "updated_datetime")
-    private OffsetDateTime updatedDatetime;
-
-    @PrePersist
-    protected void onCreate() {
-        createdDatetime = OffsetDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedDatetime = OffsetDateTime.now();
-    }
+    @UpdateTimestamp
+    @Column(name = "updated_datetime", insertable = false)
+    private LocalDateTime updatedDatetime;
 
     public enum State {
         PENDING,
         FULFILLED,
         EXPIRED,
         CANCELLED
-    }
-
-    // Getters and Setters
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(Long orgId) {
-        this.orgId = orgId;
-    }
-
-    public Integer getEntityTypeId() {
-        return entityTypeId;
-    }
-
-    public void setEntityTypeId(Integer entityTypeId) {
-        this.entityTypeId = entityTypeId;
-    }
-
-    public Long getEntityId() {
-        return entityId;
-    }
-
-    public void setEntityId(Long entityId) {
-        this.entityId = entityId;
-    }
-
-    public Long getRequesterAccountId() {
-        return requesterAccountId;
-    }
-
-    public void setRequesterAccountId(Long requesterAccountId) {
-        this.requesterAccountId = requesterAccountId;
-    }
-
-    public OffsetDateTime getRequestedDatetime() {
-        return requestedDatetime;
-    }
-
-    public void setRequestedDatetime(OffsetDateTime requestedDatetime) {
-        this.requestedDatetime = requestedDatetime;
-    }
-
-    public Integer getRespondWithinMinutes() {
-        return respondWithinMinutes;
-    }
-
-    public void setRespondWithinMinutes(Integer respondWithinMinutes) {
-        this.respondWithinMinutes = respondWithinMinutes;
-    }
-
-    public OffsetDateTime getExpiresAt() {
-        return expiresAt;
-    }
-
-    public void setExpiresAt(OffsetDateTime expiresAt) {
-        this.expiresAt = expiresAt;
-    }
-
-    public State getState() {
-        return state;
-    }
-
-    public void setState(State state) {
-        this.state = state;
-    }
-
-    public OffsetDateTime getCreatedDatetime() {
-        return createdDatetime;
-    }
-
-    public void setCreatedDatetime(OffsetDateTime createdDatetime) {
-        this.createdDatetime = createdDatetime;
-    }
-
-    public OffsetDateTime getUpdatedDatetime() {
-        return updatedDatetime;
-    }
-
-    public void setUpdatedDatetime(OffsetDateTime updatedDatetime) {
-        this.updatedDatetime = updatedDatetime;
     }
 }

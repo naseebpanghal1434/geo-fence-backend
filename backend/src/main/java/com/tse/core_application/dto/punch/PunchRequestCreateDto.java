@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 
 /**
  * DTO for creating a new punch request.
@@ -25,7 +25,7 @@ public class PunchRequestCreateDto {
 
     @NotNull(message = "requestedDateTime is required")
     @JsonProperty("requestedDateTime")
-    private OffsetDateTime requestedDateTime;
+    private LocalDateTime requestedDateTime;
 
     @NotNull(message = "respondWithinMinutes is required")
     @Min(value = 1, message = "respondWithinMinutes must be at least 1")
@@ -59,11 +59,11 @@ public class PunchRequestCreateDto {
         this.requesterAccountId = requesterAccountId;
     }
 
-    public OffsetDateTime getRequestedDateTime() {
+    public LocalDateTime getRequestedDateTime() {
         return requestedDateTime;
     }
 
-    public void setRequestedDateTime(OffsetDateTime requestedDateTime) {
+    public void setRequestedDateTime(LocalDateTime requestedDateTime) {
         this.requestedDateTime = requestedDateTime;
     }
 

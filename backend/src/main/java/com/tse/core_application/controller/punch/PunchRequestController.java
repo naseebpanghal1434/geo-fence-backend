@@ -12,7 +12,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.tse.core_application.DummyClasses.*;
@@ -194,12 +194,12 @@ public class PunchRequestController {
             @RequestParam(value = "from", required = false)
             @Parameter(description = "Start of time range (ISO 8601 format, defaults to start of today UTC)")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            OffsetDateTime from,
+            LocalDateTime from,
 
             @RequestParam(value = "to", required = false)
             @Parameter(description = "End of time range (ISO 8601 format, defaults to from + 1 day)")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            OffsetDateTime to,
+            LocalDateTime to,
 
             @RequestParam("accountId")
             @Parameter(description = "Account IDs to query for (can be repeated)", required = true)
