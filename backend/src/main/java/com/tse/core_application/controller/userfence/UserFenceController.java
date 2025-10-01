@@ -2,6 +2,7 @@ package com.tse.core_application.controller.userfence;
 
 import com.tse.core_application.dto.userfence.UserFencesResponse;
 import com.tse.core_application.service.userfence.UserFenceService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,12 +29,15 @@ public class UserFenceController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final UserFenceService userFenceService;
+    private final GeoFencingAccessService geoFencingAccessService;
 
-    public UserFenceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler, UserFenceService userFenceService) {
+    public UserFenceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
+                              UserFenceService userFenceService, GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.userFenceService = userFenceService;
+        this.geoFencingAccessService = geoFencingAccessService;
     }
 
     @GetMapping("/{orgId}/getUserFences")
@@ -70,6 +74,9 @@ public class UserFenceController {
         logger.info("Entered" + '"' + " getUserFences" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             UserFencesResponse response = userFenceService.getUserFences(
                     orgId,
                     accountId,

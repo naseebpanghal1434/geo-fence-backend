@@ -4,6 +4,7 @@ import com.tse.core_application.dto.assignment.AssignFenceRequest;
 import com.tse.core_application.dto.assignment.AssignFenceResult;
 import com.tse.core_application.dto.assignment.AssignedEntitiesResponse;
 import com.tse.core_application.service.assignment.FenceAssignmentService;
+import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -28,12 +29,15 @@ public class FenceAssignmentController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final FenceAssignmentService assignmentService;
+    private final GeoFencingAccessService geoFencingAccessService;
 
-    public FenceAssignmentController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler, FenceAssignmentService assignmentService) {
+    public FenceAssignmentController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
+                                    FenceAssignmentService assignmentService, GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.assignmentService = assignmentService;
+        this.geoFencingAccessService = geoFencingAccessService;
     }
 
     @PostMapping("/{orgId}/assignFenceToEntity")
@@ -58,6 +62,9 @@ public class FenceAssignmentController {
         logger.info("Entered" + '"' + " assignFenceToEntity" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             AssignFenceResult result = assignmentService.assignFenceToEntity(orgId, request);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
@@ -97,6 +104,9 @@ public class FenceAssignmentController {
         logger.info("Entered" + '"' + " getAssignedEntities" + '"' + " method ...");
 
         try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
             AssignedEntitiesResponse response = assignmentService.getAssignedEntities(orgId, fenceId);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
