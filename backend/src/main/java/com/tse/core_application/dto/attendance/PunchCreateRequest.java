@@ -1,10 +1,18 @@
 package com.tse.core_application.dto.attendance;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Phase 6b: Request body for POST /api/orgs/{orgId}/attendance/punch
  */
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class PunchCreateRequest {
 
     @JsonProperty("accountId")
@@ -30,71 +38,4 @@ public class PunchCreateRequest {
 
     @JsonProperty("idempotencyKey")
     private String idempotencyKey;
-
-    public PunchCreateRequest() {
-    }
-
-    public Long getAccountId() {
-        return accountId;
-    }
-
-    public void setAccountId(Long accountId) {
-        this.accountId = accountId;
-    }
-
-    public String getEventKind() {
-        return eventKind;
-    }
-
-    public void setEventKind(String eventKind) {
-        this.eventKind = eventKind;
-    }
-
-    public Double getLat() {
-        return lat;
-    }
-
-    public void setLat(Double lat) {
-        this.lat = lat;
-    }
-
-    public Double getLon() {
-        return lon;
-    }
-
-    public void setLon(Double lon) {
-        this.lon = lon;
-    }
-
-    public Double getAccuracyM() {
-        return accuracyM;
-    }
-
-    public void setAccuracyM(Double accuracyM) {
-        this.accuracyM = accuracyM;
-    }
-
-    public String getClientLocalTs() {
-        return clientLocalTs;
-    }
-
-    public void setClientLocalTs(String clientLocalTs) {
-        this.clientLocalTs = clientLocalTs;
-    }
-
-    public String getClientTz() {
-        return clientTz;
-    }
-
-    public void setClientTz(String clientTz) {
-        this.clientTz = clientTz;
-    }
-
-    public String getIdempotencyKey() {
-        return idempotencyKey;
-    }
-
-    public void setIdempotencyKey(String idempotencyKey) {
-        this.idempotencyKey = idempotencyKey;
-    }
 }

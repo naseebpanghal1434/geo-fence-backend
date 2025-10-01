@@ -3,7 +3,15 @@ package com.tse.core_application.dto.fence;
 import com.tse.core_application.entity.fence.GeoFence.LocationKind;
 
 import javax.validation.constraints.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class FenceCreateRequest {
 
     @NotBlank
@@ -32,69 +40,4 @@ public class FenceCreateRequest {
     private Integer radiusM;
 
     private Long createdBy;
-
-    // Getters and Setters
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public LocationKind getLocationKind() {
-        return locationKind;
-    }
-
-    public void setLocationKind(LocationKind locationKind) {
-        this.locationKind = locationKind;
-    }
-
-    public String getSiteCode() {
-        return siteCode;
-    }
-
-    public void setSiteCode(String siteCode) {
-        this.siteCode = siteCode;
-    }
-
-    public String getTz() {
-        return tz;
-    }
-
-    public void setTz(String tz) {
-        this.tz = tz;
-    }
-
-    public Double getCenterLat() {
-        return centerLat;
-    }
-
-    public void setCenterLat(Double centerLat) {
-        this.centerLat = centerLat;
-    }
-
-    public Double getCenterLng() {
-        return centerLng;
-    }
-
-    public void setCenterLng(Double centerLng) {
-        this.centerLng = centerLng;
-    }
-
-    public Integer getRadiusM() {
-        return radiusM;
-    }
-
-    public void setRadiusM(Integer radiusM) {
-        this.radiusM = radiusM;
-    }
-
-    public Long getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
-    }
 }
