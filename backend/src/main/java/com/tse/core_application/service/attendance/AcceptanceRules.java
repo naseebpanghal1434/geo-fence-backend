@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
@@ -89,9 +89,9 @@ public class AcceptanceRules {
         }
 
         // 3. Check cooldown
-        OffsetDateTime lastEventTime = getLastEventTime(todayEvents);
+        LocalDateTime lastEventTime = getLastEventTime(todayEvents);
         if (lastEventTime != null) {
-            long secondsSinceLastEvent = java.time.Duration.between(lastEventTime, OffsetDateTime.now()).getSeconds();
+            long secondsSinceLastEvent = java.time.Duration.between(lastEventTime, LocalDateTime.now()).getSeconds();
             if (secondsSinceLastEvent < policy.getCooldownSeconds()) {
                 return new ValidationResult(false, "FAIL", ExceptionCode.GRACE_EXPIRED.name(), flags);
             }
@@ -121,9 +121,9 @@ public class AcceptanceRules {
 
         // 6. Check office hours (for CHECK_IN)
         if (eventKind == EventKind.CHECK_IN) {
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now();
             String tz = officePolicyProvider.getOperationalTimezone(orgId);
-            LocalTime currentTime = now.atZoneSameInstant(ZoneId.of(tz)).toLocalTime();
+            LocalTime currentTime = now.toLocalTime();
             LocalTime officeStart = officePolicyProvider.getOfficeStartTime(orgId);
             LocalTime officeEnd = officePolicyProvider.getOfficeEndTime(orgId);
 
@@ -140,9 +140,9 @@ public class AcceptanceRules {
 
         // 7. Check office hours (for CHECK_OUT)
         if (eventKind == EventKind.CHECK_OUT) {
-            OffsetDateTime now = OffsetDateTime.now();
+            LocalDateTime now = LocalDateTime.now();
             String tz = officePolicyProvider.getOperationalTimezone(orgId);
-            LocalTime currentTime = now.atZoneSameInstant(ZoneId.of(tz)).toLocalTime();
+            LocalTime currentTime = now.toLocalTime();
             LocalTime officeEnd = officePolicyProvider.getOfficeEndTime(orgId);
 
             LocalTime earliestCheckout = officeEnd.minusMinutes(policy.getAllowCheckoutBeforeEndMin());
@@ -159,7 +159,7 @@ public class AcceptanceRules {
         if (eventKind == EventKind.CHECK_OUT) {
             AttendanceEvent firstCheckin = getFirstCheckinToday(todayEvents);
             if (firstCheckin != null) {
-                long hoursWorked = java.time.Duration.between(firstCheckin.getTsUtc(), OffsetDateTime.now()).toHours();
+                long hoursWorked = java.time.Duration.between(firstCheckin.getTsUtc(), LocalDateTime.now()).toHours();
                 if (hoursWorked > policy.getMaxWorkingHoursPerDay()) {
                     flags.put("excessive_hours", true);
                 }
@@ -186,7 +186,7 @@ public class AcceptanceRules {
         return new ValidationResult(success, verdict, failReason, flags);
     }
 
-    private OffsetDateTime getLastEventTime(List<AttendanceEvent> events) {
+    private LocalDateTime getLastEventTime(List<AttendanceEvent> events) {
         if (events == null || events.isEmpty()) {
             return null;
         }
@@ -300,7 +300,7 @@ public class AcceptanceRules {
         }
 
         // 2. Check time window
-        OffsetDateTime now = OffsetDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
         if (now.isBefore(punchRequest.getRequestedDatetime()) || now.isAfter(punchRequest.getExpiresAt())) {
             return new ValidationResult(false, "FAIL", ExceptionCode.FAILED_PUNCH.name(), flags);
         }

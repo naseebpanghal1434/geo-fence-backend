@@ -4,7 +4,7 @@ import com.tse.core_application.entity.attendance.AttendanceEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -17,5 +17,5 @@ public interface AttendanceEventRepository extends JpaRepository<AttendanceEvent
     List<AttendanceEvent> findByOrgIdAndAccountIdOrderByTsUtcDesc(Long orgId, Long accountId);
 
     List<AttendanceEvent> findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
-            Long orgId, Long accountId, OffsetDateTime start, OffsetDateTime end);
+            Long orgId, Long accountId, LocalDateTime start, LocalDateTime end);
 }

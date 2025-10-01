@@ -1,10 +1,21 @@
 package com.tse.core_application.entity.assignment;
 
 import javax.persistence.*;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity
 @Table(name = "fence_assignment")
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class FenceAssignment {
 
     @Id
@@ -29,108 +40,14 @@ public class FenceAssignment {
     @Column(name = "created_by")
     private Long createdBy;
 
-    @Column(name = "created_datetime", nullable = false)
-    private OffsetDateTime createdDatetime;
+    @CreationTimestamp
+    @Column(name = "created_datetime", nullable = false, updatable = false)
+    private LocalDateTime createdDatetime;
 
     @Column(name = "updated_by")
     private Long updatedBy;
 
-    @Column(name = "updated_datetime")
-    private OffsetDateTime updatedDatetime;
-
-    @PrePersist
-    protected void onCreate() {
-        createdDatetime = OffsetDateTime.now();
-        updatedDatetime = OffsetDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedDatetime = OffsetDateTime.now();
-    }
-
-    // Constructors
-    public FenceAssignment() {
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(Long orgId) {
-        this.orgId = orgId;
-    }
-
-    public Long getFenceId() {
-        return fenceId;
-    }
-
-    public void setFenceId(Long fenceId) {
-        this.fenceId = fenceId;
-    }
-
-    public Integer getEntityTypeId() {
-        return entityTypeId;
-    }
-
-    public void setEntityTypeId(Integer entityTypeId) {
-        this.entityTypeId = entityTypeId;
-    }
-
-    public Long getEntityId() {
-        return entityId;
-    }
-
-    public void setEntityId(Long entityId) {
-        this.entityId = entityId;
-    }
-
-    public Boolean getIsDefault() {
-        return isDefault;
-    }
-
-    public void setIsDefault(Boolean isDefault) {
-        this.isDefault = isDefault;
-    }
-
-    public Long getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public OffsetDateTime getCreatedDatetime() {
-        return createdDatetime;
-    }
-
-    public void setCreatedDatetime(OffsetDateTime createdDatetime) {
-        this.createdDatetime = createdDatetime;
-    }
-
-    public Long getUpdatedBy() {
-        return updatedBy;
-    }
-
-    public void setUpdatedBy(Long updatedBy) {
-        this.updatedBy = updatedBy;
-    }
-
-    public OffsetDateTime getUpdatedDatetime() {
-        return updatedDatetime;
-    }
-
-    public void setUpdatedDatetime(OffsetDateTime updatedDatetime) {
-        this.updatedDatetime = updatedDatetime;
-    }
+    @UpdateTimestamp
+    @Column(name = "updated_datetime", insertable = false)
+    private LocalDateTime updatedDatetime;
 }

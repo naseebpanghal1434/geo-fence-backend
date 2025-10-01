@@ -7,9 +7,14 @@ import org.hibernate.annotations.TypeDef;
 
 import javax.persistence.*;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Daily attendance rollup for an account.
@@ -18,6 +23,10 @@ import java.util.Map;
 @Entity
 @Table(name = "attendance_day")
 @TypeDef(name = "jsonb", typeClass = JsonBinaryType.class)
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class AttendanceDay {
 
     @Id
@@ -34,10 +43,10 @@ public class AttendanceDay {
     private LocalDate dateKey;
 
     @Column(name = "first_in_utc")
-    private OffsetDateTime firstInUtc;
+    private LocalDateTime firstInUtc;
 
     @Column(name = "last_out_utc")
-    private OffsetDateTime lastOutUtc;
+    private LocalDateTime lastOutUtc;
 
     @Column(name = "worked_seconds", nullable = false)
     private Integer workedSeconds = 0;
@@ -52,86 +61,4 @@ public class AttendanceDay {
     @Type(type = "jsonb")
     @Column(name = "anomalies", columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> anomalies = new HashMap<>();
-
-    // Getters and Setters
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(Long orgId) {
-        this.orgId = orgId;
-    }
-
-    public Long getAccountId() {
-        return accountId;
-    }
-
-    public void setAccountId(Long accountId) {
-        this.accountId = accountId;
-    }
-
-    public LocalDate getDateKey() {
-        return dateKey;
-    }
-
-    public void setDateKey(LocalDate dateKey) {
-        this.dateKey = dateKey;
-    }
-
-    public OffsetDateTime getFirstInUtc() {
-        return firstInUtc;
-    }
-
-    public void setFirstInUtc(OffsetDateTime firstInUtc) {
-        this.firstInUtc = firstInUtc;
-    }
-
-    public OffsetDateTime getLastOutUtc() {
-        return lastOutUtc;
-    }
-
-    public void setLastOutUtc(OffsetDateTime lastOutUtc) {
-        this.lastOutUtc = lastOutUtc;
-    }
-
-    public Integer getWorkedSeconds() {
-        return workedSeconds;
-    }
-
-    public void setWorkedSeconds(Integer workedSeconds) {
-        this.workedSeconds = workedSeconds;
-    }
-
-    public Integer getBreakSeconds() {
-        return breakSeconds;
-    }
-
-    public void setBreakSeconds(Integer breakSeconds) {
-        this.breakSeconds = breakSeconds;
-    }
-
-    public AttendanceStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(AttendanceStatus status) {
-        this.status = status;
-    }
-
-    public Map<String, Object> getAnomalies() {
-        return anomalies;
-    }
-
-    public void setAnomalies(Map<String, Object> anomalies) {
-        this.anomalies = anomalies;
-    }
 }

@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +28,7 @@ public interface PunchRequestRepository extends JpaRepository<PunchRequest, Long
            "AND pr.entityId IN :entityIds")
     List<PunchRequest> findPendingForEntities(
             @Param("orgId") Long orgId,
-            @Param("now") OffsetDateTime now,
+            @Param("now") LocalDateTime now,
             @Param("entityTypeId") Integer entityTypeId,
             @Param("entityIds") Collection<Long> entityIds
     );
@@ -45,8 +45,8 @@ public interface PunchRequestRepository extends JpaRepository<PunchRequest, Long
            "ORDER BY pr.requestedDatetime DESC")
     List<PunchRequest> findHistoryForEntities(
             @Param("orgId") Long orgId,
-            @Param("from") OffsetDateTime from,
-            @Param("to") OffsetDateTime to,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
             @Param("entityTypeId") Integer entityTypeId,
             @Param("entityIds") Collection<Long> entityIds
     );
@@ -62,6 +62,6 @@ public interface PunchRequestRepository extends JpaRepository<PunchRequest, Long
            "ORDER BY pr.requestedDatetime ASC")
     List<PunchRequest> findAllPendingForOrg(
             @Param("orgId") Long orgId,
-            @Param("now") OffsetDateTime now
+            @Param("now") LocalDateTime now
     );
 }
