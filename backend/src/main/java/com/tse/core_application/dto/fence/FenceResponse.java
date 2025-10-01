@@ -3,6 +3,7 @@ package com.tse.core_application.dto.fence;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.tse.core_application.entity.fence.GeoFence;
 import com.tse.core_application.entity.fence.GeoFence.LocationKind;
+import com.tse.core_application.util.DateTimeUtils;
 
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -33,6 +34,10 @@ public class FenceResponse {
     private LocalDateTime updatedDatetime;
 
     public static FenceResponse fromEntity(GeoFence fence) {
+        return fromEntity(fence, null);
+    }
+
+    public static FenceResponse fromEntity(GeoFence fence, String timeZone) {
         FenceResponse response = new FenceResponse();
         response.setId(fence.getId());
         response.setOrgId(fence.getOrgId());
@@ -45,9 +50,15 @@ public class FenceResponse {
         response.setRadiusM(fence.getRadiusM());
         response.setIsActive(fence.getIsActive());
         response.setCreatedBy(fence.getCreatedBy());
-        response.setCreatedDatetime(fence.getCreatedDatetime());
+        // Convert timestamps from server timezone to user timezone
+        if (timeZone != null) {
+            response.setCreatedDatetime(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(fence.getCreatedDatetime(), timeZone));
+            response.setUpdatedDatetime(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(fence.getUpdatedDatetime(), timeZone));
+        } else {
+            response.setCreatedDatetime(fence.getCreatedDatetime());
+            response.setUpdatedDatetime(fence.getUpdatedDatetime());
+        }
         response.setUpdatedBy(fence.getUpdatedBy());
-        response.setUpdatedDatetime(fence.getUpdatedDatetime());
         return response;
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.tse.core_application.entity.policy.AttendancePolicy;
 import com.tse.core_application.entity.policy.AttendancePolicy.IntegrityPosture;
 import com.tse.core_application.entity.policy.AttendancePolicy.OutsideFencePolicy;
+import com.tse.core_application.util.DateTimeUtils;
 
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -57,6 +58,11 @@ public class PolicyResponse {
 
     // Factory method for full policy
     public static PolicyResponse fromEntity(AttendancePolicy policy) {
+        return fromEntity(policy, null);
+    }
+
+    // Factory method for full policy with timezone conversion
+    public static PolicyResponse fromEntity(AttendancePolicy policy, String timeZone) {
         PolicyResponse response = new PolicyResponse();
         response.setPolicyId(policy.getId());
         response.setOrgId(policy.getOrgId());
@@ -80,9 +86,15 @@ public class PolicyResponse {
         response.setAutoOutDelayMin(policy.getAutoOutDelayMin());
         response.setUndoWindowMin(policy.getUndoWindowMin());
         response.setCreatedBy(policy.getCreatedBy());
-        response.setCreatedDatetime(policy.getCreatedDatetime());
+        // Convert timestamps from server timezone to user timezone
+        if (timeZone != null) {
+            response.setCreatedDatetime(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(policy.getCreatedDatetime(), timeZone));
+            response.setUpdatedDatetime(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(policy.getUpdatedDatetime(), timeZone));
+        } else {
+            response.setCreatedDatetime(policy.getCreatedDatetime());
+            response.setUpdatedDatetime(policy.getUpdatedDatetime());
+        }
         response.setUpdatedBy(policy.getUpdatedBy());
-        response.setUpdatedDatetime(policy.getUpdatedDatetime());
         return response;
     }
 }

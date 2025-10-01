@@ -70,7 +70,7 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " createPunchRequest" + '"' + " method ...");
 
         try {
-            PunchRequestViewDto result = punchRequestService.createPunchRequest(orgId, request);
+            PunchRequestViewDto result = punchRequestService.createPunchRequest(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " createPunchRequest" + '"' + " method because completed successfully ...");
@@ -117,7 +117,7 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPendingRequests" + '"' + " method ...");
 
         try {
-            List<PunchRequestViewDto> results = punchRequestService.getPendingRequestsForAccounts(orgId, accountIds);
+            List<PunchRequestViewDto> results = punchRequestService.getPendingRequestsForAccounts(orgId, accountIds, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getPendingRequests" + '"' + " method because completed successfully ...");
@@ -163,7 +163,7 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPunchRequestById" + '"' + " method ...");
 
         try {
-            PunchRequestViewDto result = punchRequestService.getPunchRequestById(orgId, id);
+            PunchRequestViewDto result = punchRequestService.getPunchRequestById(orgId, id, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getPunchRequestById" + '"' + " method because completed successfully ...");
@@ -220,7 +220,7 @@ public class PunchRequestController {
         logger.info("Entered" + '"' + " getPendingRequestHistory" + '"' + " method ...");
 
         try {
-            List<PunchRequestViewDto> results = punchRequestService.getPendingRequestHistory(orgId, from, to, accountIds);
+            List<PunchRequestViewDto> results = punchRequestService.getPendingRequestHistory(orgId, from, to, accountIds, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getPendingRequestHistory" + '"' + " method because completed successfully ...");
