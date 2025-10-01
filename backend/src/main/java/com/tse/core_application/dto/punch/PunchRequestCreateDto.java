@@ -5,10 +5,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * DTO for creating a new punch request.
  */
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class PunchRequestCreateDto {
 
     @NotNull(message = "entityTypeId is required")
@@ -31,47 +39,4 @@ public class PunchRequestCreateDto {
     @Min(value = 1, message = "respondWithinMinutes must be at least 1")
     @JsonProperty("respondWithinMinutes")
     private Integer respondWithinMinutes;
-
-    public PunchRequestCreateDto() {
-    }
-
-    public Integer getEntityTypeId() {
-        return entityTypeId;
-    }
-
-    public void setEntityTypeId(Integer entityTypeId) {
-        this.entityTypeId = entityTypeId;
-    }
-
-    public Long getEntityId() {
-        return entityId;
-    }
-
-    public void setEntityId(Long entityId) {
-        this.entityId = entityId;
-    }
-
-    public Long getRequesterAccountId() {
-        return requesterAccountId;
-    }
-
-    public void setRequesterAccountId(Long requesterAccountId) {
-        this.requesterAccountId = requesterAccountId;
-    }
-
-    public LocalDateTime getRequestedDateTime() {
-        return requestedDateTime;
-    }
-
-    public void setRequestedDateTime(LocalDateTime requestedDateTime) {
-        this.requestedDateTime = requestedDateTime;
-    }
-
-    public Integer getRespondWithinMinutes() {
-        return respondWithinMinutes;
-    }
-
-    public void setRespondWithinMinutes(Integer respondWithinMinutes) {
-        this.respondWithinMinutes = respondWithinMinutes;
-    }
 }

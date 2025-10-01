@@ -5,7 +5,15 @@ import com.tse.core_application.entity.fence.GeoFence;
 import com.tse.core_application.entity.fence.GeoFence.LocationKind;
 
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class FenceResponse {
 
@@ -24,9 +32,6 @@ public class FenceResponse {
     private Long updatedBy;
     private LocalDateTime updatedDatetime;
 
-    public FenceResponse() {
-    }
-
     public static FenceResponse fromEntity(GeoFence fence) {
         FenceResponse response = new FenceResponse();
         response.setId(fence.getId());
@@ -44,118 +49,5 @@ public class FenceResponse {
         response.setUpdatedBy(fence.getUpdatedBy());
         response.setUpdatedDatetime(fence.getUpdatedDatetime());
         return response;
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getOrgId() {
-        return orgId;
-    }
-
-    public void setOrgId(Long orgId) {
-        this.orgId = orgId;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public LocationKind getLocationKind() {
-        return locationKind;
-    }
-
-    public void setLocationKind(LocationKind locationKind) {
-        this.locationKind = locationKind;
-    }
-
-    public String getSiteCode() {
-        return siteCode;
-    }
-
-    public void setSiteCode(String siteCode) {
-        this.siteCode = siteCode;
-    }
-
-    public String getTz() {
-        return tz;
-    }
-
-    public void setTz(String tz) {
-        this.tz = tz;
-    }
-
-    public Double getCenterLat() {
-        return centerLat;
-    }
-
-    public void setCenterLat(Double centerLat) {
-        this.centerLat = centerLat;
-    }
-
-    public Double getCenterLng() {
-        return centerLng;
-    }
-
-    public void setCenterLng(Double centerLng) {
-        this.centerLng = centerLng;
-    }
-
-    public Integer getRadiusM() {
-        return radiusM;
-    }
-
-    public void setRadiusM(Integer radiusM) {
-        this.radiusM = radiusM;
-    }
-
-    public Boolean getIsActive() {
-        return isActive;
-    }
-
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-
-    public Long getCreatedBy() {
-        return createdBy;
-    }
-
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
-    }
-
-    public LocalDateTime getCreatedDatetime() {
-        return createdDatetime;
-    }
-
-    public void setCreatedDatetime(LocalDateTime createdDatetime) {
-        this.createdDatetime = createdDatetime;
-    }
-
-    public Long getUpdatedBy() {
-        return updatedBy;
-    }
-
-    public void setUpdatedBy(Long updatedBy) {
-        this.updatedBy = updatedBy;
-    }
-
-    public LocalDateTime getUpdatedDatetime() {
-        return updatedDatetime;
-    }
-
-    public void setUpdatedDatetime(LocalDateTime updatedDatetime) {
-        this.updatedDatetime = updatedDatetime;
     }
 }

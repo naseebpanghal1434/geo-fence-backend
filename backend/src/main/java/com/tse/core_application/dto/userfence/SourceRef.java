@@ -1,10 +1,18 @@
 package com.tse.core_application.dto.userfence;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Represents the source of a fence assignment (entity that contributed the fence).
  */
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class SourceRef {
 
     @JsonProperty("entityTypeId")
@@ -15,37 +23,4 @@ public class SourceRef {
 
     @JsonProperty("defaultForEntity")
     private Boolean defaultForEntity;
-
-    public SourceRef() {
-    }
-
-    public SourceRef(Integer entityTypeId, Long entityId, Boolean defaultForEntity) {
-        this.entityTypeId = entityTypeId;
-        this.entityId = entityId;
-        this.defaultForEntity = defaultForEntity;
-    }
-
-    public Integer getEntityTypeId() {
-        return entityTypeId;
-    }
-
-    public void setEntityTypeId(Integer entityTypeId) {
-        this.entityTypeId = entityTypeId;
-    }
-
-    public Long getEntityId() {
-        return entityId;
-    }
-
-    public void setEntityId(Long entityId) {
-        this.entityId = entityId;
-    }
-
-    public Boolean getDefaultForEntity() {
-        return defaultForEntity;
-    }
-
-    public void setDefaultForEntity(Boolean defaultForEntity) {
-        this.defaultForEntity = defaultForEntity;
-    }
 }

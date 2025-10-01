@@ -3,10 +3,18 @@ package com.tse.core_application.dto.attendance;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * Phase 6b: Response for POST /api/orgs/{orgId}/attendance/punch
  */
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class PunchResponse {
 
     @JsonProperty("eventId")
@@ -41,95 +49,4 @@ public class PunchResponse {
 
     @JsonProperty("flags")
     private Map<String, Object> flags;
-
-    public PunchResponse() {
-    }
-
-    public Long getEventId() {
-        return eventId;
-    }
-
-    public void setEventId(Long eventId) {
-        this.eventId = eventId;
-    }
-
-    public Long getAccountId() {
-        return accountId;
-    }
-
-    public void setAccountId(Long accountId) {
-        this.accountId = accountId;
-    }
-
-    public String getEventKind() {
-        return eventKind;
-    }
-
-    public void setEventKind(String eventKind) {
-        this.eventKind = eventKind;
-    }
-
-    public String getEventSource() {
-        return eventSource;
-    }
-
-    public void setEventSource(String eventSource) {
-        this.eventSource = eventSource;
-    }
-
-    public String getTsUtc() {
-        return tsUtc;
-    }
-
-    public void setTsUtc(String tsUtc) {
-        this.tsUtc = tsUtc;
-    }
-
-    public Long getFenceId() {
-        return fenceId;
-    }
-
-    public void setFenceId(Long fenceId) {
-        this.fenceId = fenceId;
-    }
-
-    public Boolean getUnderRange() {
-        return underRange;
-    }
-
-    public void setUnderRange(Boolean underRange) {
-        this.underRange = underRange;
-    }
-
-    public Boolean getSuccess() {
-        return success;
-    }
-
-    public void setSuccess(Boolean success) {
-        this.success = success;
-    }
-
-    public String getVerdict() {
-        return verdict;
-    }
-
-    public void setVerdict(String verdict) {
-        this.verdict = verdict;
-    }
-
-    public String getFailReason() {
-        return failReason;
-    }
-
-    public void setFailReason(String failReason) {
-        this.failReason = failReason;
-    }
-
-    public Map<String, Object> getFlags() {
-        return flags;
-    }
-
-    public void setFlags(Map<String, Object> flags) {
-        this.flags = flags;
-    }
 }
