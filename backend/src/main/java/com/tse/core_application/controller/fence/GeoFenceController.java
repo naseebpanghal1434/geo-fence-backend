@@ -1,6 +1,7 @@
 package com.tse.core_application.controller.fence;
 
 import com.tse.core_application.dto.fence.FenceCreateRequest;
+import com.tse.core_application.dto.fence.FenceFilterRequest;
 import com.tse.core_application.dto.fence.FenceResponse;
 import com.tse.core_application.dto.fence.FenceUpdateRequest;
 import com.tse.core_application.service.fence.GeoFenceService;
@@ -122,13 +123,11 @@ public class GeoFenceController {
         }
     }
 
-    @GetMapping("/orgs/{orgId}/getFence")
+    @PostMapping("/orgs/{orgId}/getFence")
     @Operation(summary = "Get geo-fences for an organization with optional filters")
     public ResponseEntity<Object> getFences(
             @Parameter(description = "Organization ID") @PathVariable Long orgId,
-            @Parameter(description = "Filter by status: active, inactive, or both") @RequestParam(required = false, defaultValue = "both") String status,
-            @Parameter(description = "Search by fence name (case-insensitive)") @RequestParam(required = false) String q,
-            @Parameter(description = "Filter by site code") @RequestParam(required = false) String siteCode,
+            @RequestBody(required = false) FenceFilterRequest filterRequest,
             @RequestHeader(name = "screenName") String screenName,
             @RequestHeader(name = "timeZone") String timeZone,
             @RequestHeader(name = "accountIds") String accountIds,
@@ -147,7 +146,16 @@ public class GeoFenceController {
             // Validate geo-fencing access for the organization
             geoFencingAccessService.validateGeoFencingAccess(orgId);
 
-            List<FenceResponse> fences = fenceService.listFences(orgId, status, q, siteCode, timeZone);
+            // Handle null filterRequest by creating a default instance
+            if (filterRequest == null) {
+                filterRequest = new FenceFilterRequest();
+            }
+
+            List<FenceResponse> fences = fenceService.listFences(orgId,
+                    filterRequest.getStatus() != null ? filterRequest.getStatus() : "both",
+                    filterRequest.getQ(),
+                    filterRequest.getSiteCode(),
+                    timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getFences" + '"' + " method because completed successfully ...");
