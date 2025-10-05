@@ -113,8 +113,8 @@ public class AttendanceService {
             );
         }
 
-        // 5. Get assigned fence for user
-        GeoFence fence = getDefaultFenceForUser(orgId, request.getAccountId());
+        // 5. Get nearest fence for user based on current location
+        GeoFence fence = getNearestFenceForUser(orgId, request.getAccountId(), request.getLat(), request.getLon());
 
         // 6. Get today's events for validation
         LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
@@ -356,6 +356,68 @@ public class AttendanceService {
         }
     }
 
+    /**
+     * Get the nearest fence for a user based on their current location.
+     * Finds all fences assigned to user's entities and returns the closest one.
+     *
+     * @param orgId Organization ID
+     * @param accountId User account ID
+     * @param userLat User's current latitude
+     * @param userLon User's current longitude
+     * @return The nearest GeoFence, or null if no fences are assigned
+     */
+    private GeoFence getNearestFenceForUser(long orgId, long accountId, double userLat, double userLon) {
+        // Expand memberships
+        Set<EntityRef> entities = expandMemberships(orgId, accountId);
+
+        // Get assignments for all entities
+        List<Integer> entityTypeIds = entities.stream()
+                .map(e -> e.entityTypeId)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Long> entityIds = entities.stream()
+                .map(e -> e.entityId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<FenceAssignment> assignments = assignmentRepository
+                .findByOrgIdAndEntityTypeIdInAndEntityIdIn(orgId, entityTypeIds, entityIds);
+
+        if (assignments.isEmpty()) {
+            return null;
+        }
+
+        // Get all unique fence IDs from assignments
+        List<Long> fenceIds = assignments.stream()
+                .map(FenceAssignment::getFenceId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Fetch all fences
+        List<GeoFence> fences = fenceRepository.findAllById(fenceIds);
+
+        if (fences.isEmpty()) {
+            return null;
+        }
+
+        // Find the nearest fence based on distance from user's current location
+        GeoFence nearestFence = fences.stream()
+                .min(Comparator.comparingDouble(fence ->
+                    com.tse.core_application.util.GeoMath.distanceMeters(
+                        userLat, userLon,
+                        fence.getCenterLat(), fence.getCenterLng()
+                    )
+                ))
+                .orElse(null);
+
+        return nearestFence;
+    }
+
+    /**
+     * Get default fence for user (deprecated - kept for backward compatibility).
+     * Use getNearestFenceForUser instead.
+     */
+    @Deprecated
     private GeoFence getDefaultFenceForUser(long orgId, long accountId) {
         // Expand memberships
         Set<EntityRef> entities = expandMemberships(orgId, accountId);
