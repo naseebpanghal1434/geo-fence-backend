@@ -288,10 +288,23 @@ public class AcceptanceRules {
      * Validate PUNCHED event (supervisor/manager-triggered punch).
      *
      * @param punchRequest  The punch request being fulfilled
+     * @param lat           Latitude
+     * @param lon           Longitude
+     * @param accuracyM     GPS accuracy in meters
+     * @param policy        Attendance policy
+     * @param fence         Assigned fence (can be null)
      * @param todayEvents   Events for today
      * @return ValidationResult
      */
-    public ValidationResult validatePunched(PunchRequest punchRequest, List<AttendanceEvent> todayEvents) {
+    public ValidationResult validatePunched(
+            PunchRequest punchRequest,
+            Double lat,
+            Double lon,
+            Double accuracyM,
+            AttendancePolicy policy,
+            GeoFence fence,
+            List<AttendanceEvent> todayEvents
+    ) {
         Map<String, Object> flags = new HashMap<>();
 
         // 1. Check if PunchRequest is valid and pending
@@ -305,18 +318,48 @@ public class AcceptanceRules {
             return new ValidationResult(false, "FAIL", ExceptionCode.FAILED_PUNCH.name(), flags);
         }
 
-        // 3. Validate user state - must have checked in today
+        // 3. Check accuracy gate
+        if (accuracyM != null && accuracyM > policy.getAccuracyGateM()) {
+            flags.put("low_accuracy", true);
+            if (policy.getIntegrityPosture() == AttendancePolicy.IntegrityPosture.BLOCK) {
+                return new ValidationResult(false, "FAIL", ExceptionCode.LOW_ACCURACY.name(), flags);
+            }
+        }
+
+        // 4. Check geofence if fence is provided
+        boolean underRange = false;
+        if (fence != null && lat != null && lon != null) {
+            double distance = GeoMath.distanceMeters(lat, lon, fence.getCenterLat(), fence.getCenterLng());
+            underRange = distance <= policy.getFenceRadiusM();
+
+            if (!underRange) {
+                flags.put("out_of_fence", true);
+                if (policy.getOutsideFencePolicy() == AttendancePolicy.OutsideFencePolicy.BLOCK) {
+                    return new ValidationResult(false, "FAIL", ExceptionCode.OUTSIDE_FENCE.name(), flags);
+                }
+            }
+        }
+
+        // 5. Validate user state - must have checked in today
         if (!isCurrentlyCheckedIn(todayEvents)) {
             return new ValidationResult(false, "FAIL", ExceptionCode.MISSING_CHECKIN.name(), flags);
         }
 
-        // 4. User must not be on break
+        // 6. User must not be on break
         if (isCurrentlyOnBreak(todayEvents)) {
             return new ValidationResult(false, "FAIL", ExceptionCode.BEFORE_CHECKOUT.name(), flags);
         }
 
+        // 7. Determine final verdict
+        String verdict;
+        if (flags.containsKey("out_of_fence") || flags.containsKey("low_accuracy")) {
+            verdict = "WARN";
+        } else {
+            verdict = "PASS";
+        }
+
         // PUNCHED event is valid
-        return new ValidationResult(true, "PASS", null, flags);
+        return new ValidationResult(true, verdict, null, flags);
     }
 
     /**

@@ -25,4 +25,15 @@ public class PunchedEventRequest {
     @NotNull(message = "Punch Request ID is required")
     @JsonProperty("punchRequestId")
     private Long punchRequestId;
+
+    @NotNull(message = "Latitude is required")
+    @JsonProperty("lat")
+    private Double lat;
+
+    @NotNull(message = "Longitude is required")
+    @JsonProperty("lon")
+    private Double lon;
+
+    @JsonProperty("accuracyM")
+    private Double accuracyM;
 }

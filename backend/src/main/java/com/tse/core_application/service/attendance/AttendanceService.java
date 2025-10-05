@@ -206,7 +206,7 @@ public class AttendanceService {
      * Process a PUNCHED event (supervisor/manager-triggered punch).
      */
     @Transactional
-    public PunchResponse processPunchedEvent(long orgId, long accountId, long punchRequestId, String timeZone) {
+    public PunchResponse processPunchedEvent(long orgId, long accountId, long punchRequestId, Double lat, Double lon, Double accuracyM, String timeZone) {
         // 1. Validate policy is active
         policyGate.assertPolicyActive(orgId);
 
@@ -229,7 +229,19 @@ public class AttendanceService {
             );
         }
 
-        // 3. Get today's events for validation
+        // 3. Get attendance policy
+        AttendancePolicy policy = policyRepository.findByOrgId(orgId)
+                .orElseThrow(() -> new ProblemException(
+                        HttpStatus.NOT_FOUND,
+                        "POLICY_NOT_FOUND",
+                        "Attendance policy not found",
+                        "No attendance policy found for org: " + orgId
+                ));
+
+        // 4. Get nearest fence for user based on location
+        GeoFence fence = getDefaultFenceForUser(orgId, accountId);
+
+        // 5. Get today's events for validation
         LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
         String tz = officePolicyProvider.getOperationalTimezone(orgId);
         LocalDateTime dayStart = dateKey.atStartOfDay();
@@ -239,10 +251,18 @@ public class AttendanceService {
                 orgId, accountId, dayStart, dayEnd
         );
 
-        // 4. Validate using AcceptanceRules
-        AcceptanceRules.ValidationResult validation = acceptanceRules.validatePunched(punchRequest, todayEvents);
+        // 6. Validate using AcceptanceRules with GPS location
+        AcceptanceRules.ValidationResult validation = acceptanceRules.validatePunched(
+                punchRequest,
+                lat,
+                lon,
+                accuracyM,
+                policy,
+                fence,
+                todayEvents
+        );
 
-        // 5. Create AttendanceEvent for PUNCHED
+        // 7. Create AttendanceEvent for PUNCHED
         AttendanceEvent event = new AttendanceEvent();
         event.setOrgId(orgId);
         event.setAccountId(accountId);
@@ -252,28 +272,48 @@ public class AttendanceService {
         event.setTsUtc(LocalDateTime.now());
         event.setPunchRequestId(punchRequestId);
         event.setRequesterAccountId(punchRequest.getRequesterAccountId());
+
+        // Set GPS location data
+        if (fence != null) {
+            event.setFenceId(fence.getId());
+        }
+        event.setLat(lat);
+        event.setLon(lon);
+        event.setAccuracyM(accuracyM);
+
+        // Determine under_range
+        boolean underRange = false;
+        if (fence != null && lat != null && lon != null) {
+            double distance = com.tse.core_application.util.GeoMath.distanceMeters(
+                    lat, lon,
+                    fence.getCenterLat(), fence.getCenterLng()
+            );
+            underRange = distance <= policy.getFenceRadiusM();
+        }
+        event.setUnderRange(underRange);
+
         event.setSuccess(validation.isSuccess());
         event.setVerdict(IntegrityVerdict.valueOf(validation.getVerdict()));
         event.setFailReason(validation.getFailReason());
         event.setFlags(validation.getFlags());
 
-        // 6. If validation succeeded, mark punch request as FULFILLED
+        // 8. If validation succeeded, mark punch request as FULFILLED
         if (validation.isSuccess()) {
             punchRequest.setState(PunchRequest.State.FULFILLED);
             punchRequestRepository.save(punchRequest);
         }
 
-        // 7. Save event
+        // 9. Save event
         AttendanceEvent savedEvent = eventRepository.save(event);
 
-        // 8. Update day rollup if successful
+        // 10. Update day rollup if successful
         if (validation.isSuccess()) {
             List<AttendanceEvent> updatedEvents = new ArrayList<>(todayEvents);
             updatedEvents.add(savedEvent);
             dayRollupService.updateDayRollup(orgId, accountId, dateKey, updatedEvents);
         }
 
-        // 9. Return response
+        // 11. Return response
         return mapToResponse(savedEvent, timeZone);
     }
 
