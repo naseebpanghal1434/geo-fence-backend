@@ -120,7 +120,15 @@ public class AttendanceController {
             // Validate geo-fencing access for the organization
             geoFencingAccessService.validateGeoFencingAccess(orgId);
 
-            PunchResponse response = attendanceService.processPunchedEvent(orgId, request.getAccountId(), request.getPunchRequestId(), timeZone);
+            PunchResponse response = attendanceService.processPunchedEvent(
+                    orgId,
+                    request.getAccountId(),
+                    request.getPunchRequestId(),
+                    request.getLat(),
+                    request.getLon(),
+                    request.getAccuracyM(),
+                    timeZone
+            );
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " processPunched" + '"' + " method because completed successfully ...");
