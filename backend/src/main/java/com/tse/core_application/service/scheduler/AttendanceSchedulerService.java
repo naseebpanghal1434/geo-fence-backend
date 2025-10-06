@@ -278,21 +278,31 @@ public class AttendanceSchedulerService {
             dateToProcess = today;
         }
 
-        // Check if cutoff time has passed
-        if (now.isBefore(cutoffDateTime)) {
-            // Not yet time to auto-checkout
+        // Check if current time matches cutoff time (rounded to minute)
+        // This ensures the scheduler runs only ONCE per day at the exact cutoff time
+        LocalTime cutoffTime = cutoffDateTime.toLocalTime();
+        LocalTime currentTime = now.toLocalTime();
+
+        if (currentTime.getHour() != cutoffTime.getHour() ||
+            currentTime.getMinute() != cutoffTime.getMinute()) {
+            // Not the exact cutoff minute, skip
             return;
         }
 
-        logger.info("Processing auto-checkout for orgId=" + orgId + ", date=" + dateToProcess +
-                   ", cutoffTime=" + cutoffDateTime);
+        logger.info("Cutoff time matched for orgId=" + orgId +
+                   ". Processing auto-checkout. CutoffTime=" + cutoffTime +
+                   ", CurrentTime=" + currentTime + ", Date=" + dateToProcess);
 
         // Check if dateToProcess is a holiday
         boolean isHoliday = holidayProvider.isHoliday(orgId, dateToProcess);
 
-        // Get all attendance days for the date to process
+        // Get attendance days that need auto-checkout (optimized query)
+        // Only get records where user has checked in but not checked out
         List<AttendanceDay> dayRecords = dayRepository.findAll().stream()
-                .filter(day -> day.getOrgId().equals(orgId) && day.getDateKey().equals(dateToProcess))
+                .filter(day -> day.getOrgId().equals(orgId) &&
+                              day.getDateKey().equals(dateToProcess) &&
+                              day.getFirstInUtc() != null &&      // Has checked in
+                              day.getLastOutUtc() == null)        // Hasn't checked out yet
                 .collect(Collectors.toList());
 
         logger.info("Found " + dayRecords.size() + " attendance records for orgId=" + orgId +
