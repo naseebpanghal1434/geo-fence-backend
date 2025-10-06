@@ -263,22 +263,28 @@ public class AttendanceSchedulerService {
         LocalDateTime now = LocalDateTime.now(zoneId);
         LocalDate today = now.toLocalDate();
 
-        // Handle day boundary crossing
-        LocalDateTime officeEndDateTime = today.atTime(officeEndTime);
-        LocalDateTime cutoffDateTime = officeEndDateTime.plusMinutes(maxCheckoutAfterEndMin);
+        // Calculate when TODAY's office ends and its cutoff
+        LocalDateTime todayOfficeEnd = today.atTime(officeEndTime);
+        LocalDateTime todayCutoff = todayOfficeEnd.plusMinutes(maxCheckoutAfterEndMin);
 
-        // Determine which date we should process
+        // Determine which date to process based on whether cutoff crosses midnight
         final LocalDate dateToProcess;
-        if (now.isBefore(officeEndDateTime)) {
-            // If current time is before office end, check yesterday
-            dateToProcess = today.minusDays(1);
-            officeEndDateTime = dateToProcess.atTime(officeEndTime);
-            cutoffDateTime = officeEndDateTime.plusMinutes(maxCheckoutAfterEndMin);
-        } else {
+        final LocalDateTime cutoffDateTime;
+
+        if (todayCutoff.toLocalDate().equals(today)) {
+            // Cutoff is still today (no midnight crossing)
+            // Example: Office ends 5 PM, grace 60 min = cutoff 6 PM (same day)
             dateToProcess = today;
+            cutoffDateTime = todayCutoff;
+        } else {
+            // Cutoff is tomorrow (crossed midnight)
+            // Example: Office ends 11:55 PM, grace 20 min = cutoff 12:15 AM (next day)
+            // When it's 12:15 AM on Oct 6, we process Oct 5's data
+            dateToProcess = today.minusDays(1);
+            cutoffDateTime = dateToProcess.atTime(officeEndTime).plusMinutes(maxCheckoutAfterEndMin);
         }
 
-        // Check if current time matches cutoff time (rounded to minute)
+        // Check if current time matches cutoff time (hour and minute)
         // This ensures the scheduler runs only ONCE per day at the exact cutoff time
         LocalTime cutoffTime = cutoffDateTime.toLocalTime();
         LocalTime currentTime = now.toLocalTime();
@@ -290,8 +296,8 @@ public class AttendanceSchedulerService {
         }
 
         logger.info("Cutoff time matched for orgId=" + orgId +
-                   ". Processing auto-checkout. CutoffTime=" + cutoffTime +
-                   ", CurrentTime=" + currentTime + ", Date=" + dateToProcess);
+                   ". Processing auto-checkout. CutoffDateTime=" + cutoffDateTime +
+                   ", CurrentDateTime=" + now + ", DateToProcess=" + dateToProcess);
 
         // Check if dateToProcess is a holiday
         boolean isHoliday = holidayProvider.isHoliday(orgId, dateToProcess);
