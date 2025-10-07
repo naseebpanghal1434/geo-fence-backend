@@ -1,7 +1,0 @@
-export enum EventKind {
-  CHECK_IN = 'CHECK_IN',
-  CHECK_OUT = 'CHECK_OUT',
-  BREAK_START = 'BREAK_START',
-  BREAK_END = 'BREAK_END',
-  PUNCHED = 'PUNCHED',
-}
