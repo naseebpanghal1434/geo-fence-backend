@@ -6,6 +6,7 @@ import com.tse.core_application.dto.punch.PunchRequestViewDto;
 import com.tse.core_application.entity.punch.PunchRequest;
 import com.tse.core_application.exception.ProblemException;
 import com.tse.core_application.repository.punch.PunchRequestRepository;
+import com.tse.core_application.service.attendance.OfficePolicyProvider;
 import com.tse.core_application.service.membership.MembershipProvider;
 import com.tse.core_application.service.policy.PolicyGate;
 import com.tse.core_application.util.DateTimeUtils;
@@ -18,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,6 +35,7 @@ public class PunchRequestService {
     private final PunchRequestRepository punchRequestRepository;
     private final MembershipProvider membershipProvider;
     private final PolicyGate policyGate;
+    private final OfficePolicyProvider officePolicyProvider;
 
     @Value("${attendance.punch.max-past-skew-minutes:5}")
     private int maxPastSkewMinutes;
@@ -41,10 +45,12 @@ public class PunchRequestService {
 
     public PunchRequestService(PunchRequestRepository punchRequestRepository,
                                MembershipProvider membershipProvider,
-                               PolicyGate policyGate) {
+                               PolicyGate policyGate,
+                               OfficePolicyProvider officePolicyProvider) {
         this.punchRequestRepository = punchRequestRepository;
         this.membershipProvider = membershipProvider;
         this.policyGate = policyGate;
+        this.officePolicyProvider = officePolicyProvider;
     }
 
     @Transactional
@@ -100,14 +106,18 @@ public class PunchRequestService {
             );
         }
 
-        // Check not too far in the future
-        LocalDateTime maxAllowedFuture = now.plusDays(maxFutureDays);
-        if (requestedTimeServer.isAfter(maxAllowedFuture)) {
+        // Check not beyond office end time
+        // Get office hours from office policy provider
+        LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+        LocalDate requestedDate = requestedTimeServer.toLocalDate();
+        LocalDateTime officeEndDateTime = requestedDate.atTime(officeEndTime);
+
+        if (requestedTimeServer.isAfter(officeEndDateTime)) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_FAILED",
-                    "Requested time too far in future",
-                    "requestedDateTime cannot be more than " + maxFutureDays + " days in the future"
+                    "Requested time exceeds office end time",
+                    "requestedDateTime cannot be after office end time (" + officeEndTime + ") on the requested day"
             );
         }
 
