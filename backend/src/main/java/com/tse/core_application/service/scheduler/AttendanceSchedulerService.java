@@ -1,5 +1,6 @@
 package com.tse.core_application.service.scheduler;
 
+import com.tse.core_application.constants.EntityTypes;
 import com.tse.core_application.constants.attendance.EventAction;
 import com.tse.core_application.constants.attendance.EventKind;
 import com.tse.core_application.constants.attendance.EventSource;
@@ -7,12 +8,15 @@ import com.tse.core_application.constants.attendance.IntegrityVerdict;
 import com.tse.core_application.entity.attendance.AttendanceDay;
 import com.tse.core_application.entity.attendance.AttendanceEvent;
 import com.tse.core_application.entity.policy.AttendancePolicy;
+import com.tse.core_application.entity.punch.PunchRequest;
 import com.tse.core_application.repository.attendance.AttendanceDayRepository;
 import com.tse.core_application.repository.attendance.AttendanceEventRepository;
 import com.tse.core_application.repository.policy.AttendancePolicyRepository;
+import com.tse.core_application.repository.punch.PunchRequestRepository;
 import com.tse.core_application.service.attendance.DayRollupService;
 import com.tse.core_application.service.attendance.HolidayProvider;
 import com.tse.core_application.service.attendance.OfficePolicyProvider;
+import com.tse.core_application.service.membership.MembershipProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,6 +42,8 @@ public class AttendanceSchedulerService {
     private final OfficePolicyProvider officePolicyProvider;
     private final HolidayProvider holidayProvider;
     private final DayRollupService dayRollupService;
+    private final PunchRequestRepository punchRequestRepository;
+    private final MembershipProvider membershipProvider;
     // TODO: Inject notification service when available
     // private final NotificationService notificationService;
 
@@ -47,13 +53,17 @@ public class AttendanceSchedulerService {
             AttendanceDayRepository dayRepository,
             OfficePolicyProvider officePolicyProvider,
             HolidayProvider holidayProvider,
-            DayRollupService dayRollupService) {
+            DayRollupService dayRollupService,
+            PunchRequestRepository punchRequestRepository,
+            MembershipProvider membershipProvider) {
         this.policyRepository = policyRepository;
         this.eventRepository = eventRepository;
         this.dayRepository = dayRepository;
         this.officePolicyProvider = officePolicyProvider;
         this.holidayProvider = holidayProvider;
         this.dayRollupService = dayRollupService;
+        this.punchRequestRepository = punchRequestRepository;
+        this.membershipProvider = membershipProvider;
     }
 
     /**
@@ -83,6 +93,21 @@ public class AttendanceSchedulerService {
             logger.info("Auto-checkout scheduler completed at " + LocalDateTime.now());
         } catch (Exception e) {
             logger.error(LocalDateTime.now() + ". Caught error in autoCheckoutScheduler: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Scheduled job: Mark missed punches for expired punch requests.
+     * Runs every 1 minute.
+     */
+    @Scheduled(cron = "0 * * * * ?")  // Every minute at 0 seconds
+    public void missedPunchScheduler() {
+        try {
+            logger.info("Missed punch scheduler started at " + LocalDateTime.now());
+            processMissedPunches();
+            logger.info("Missed punch scheduler completed at " + LocalDateTime.now());
+        } catch (Exception e) {
+            logger.error(LocalDateTime.now() + ". Caught error in missedPunchScheduler: " + e.getMessage(), e);
         }
     }
 
@@ -419,5 +444,258 @@ public class AttendanceSchedulerService {
         autoEvent.setFlags(flags);
 
         eventRepository.save(autoEvent);
+    }
+
+    /**
+     * Process missed punches for expired punch requests.
+     * Called by scheduler or manually via controller.
+     */
+    @Transactional
+    public void processMissedPunches() {
+        LocalDateTime now = LocalDateTime.now();
+
+        // Get all active policies
+        List<AttendancePolicy> activePolicies = policyRepository.findAll().stream()
+                .filter(policy -> policy.getIsActive() != null && policy.getIsActive())
+                .collect(Collectors.toList());
+
+        if (activePolicies.isEmpty()) {
+            logger.info("No active attendance policies found for missed punch processing");
+            return;
+        }
+
+        logger.info("Processing missed punches for " + activePolicies.size() + " organizations");
+
+        // Process each organization
+        for (AttendancePolicy policy : activePolicies) {
+            try {
+                processOrgMissedPunches(policy.getOrgId(), now);
+            } catch (Exception e) {
+                logger.error("Error processing missed punches for orgId=" + policy.getOrgId() + ": " + e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Process missed punches for a single organization.
+     * Finds all expired punch requests and marks missed punches for users who didn't respond.
+     */
+    @Transactional
+    public void processOrgMissedPunches(Long orgId, LocalDateTime now) {
+        String timezone = officePolicyProvider.getOperationalTimezone(orgId);
+        ZoneId zoneId = ZoneId.of(timezone);
+        LocalDate today = LocalDate.now(zoneId);
+
+        // Find all punch requests that have just expired (expiresAt matches current minute)
+        List<PunchRequest> allRequests = punchRequestRepository.findAll();
+        List<PunchRequest> expiredRequests = allRequests.stream()
+                .filter(pr -> pr.getOrgId().equals(orgId))
+                .filter(pr -> pr.getState() == PunchRequest.State.PENDING)
+                .filter(pr -> {
+                    LocalDateTime expiresAt = pr.getExpiresAt();
+                    // Check if expires at current minute
+                    return expiresAt.getYear() == now.getYear() &&
+                           expiresAt.getMonthValue() == now.getMonthValue() &&
+                           expiresAt.getDayOfMonth() == now.getDayOfMonth() &&
+                           expiresAt.getHour() == now.getHour() &&
+                           expiresAt.getMinute() == now.getMinute();
+                })
+                .collect(Collectors.toList());
+
+        if (expiredRequests.isEmpty()) {
+            return;
+        }
+
+        logger.info("Found " + expiredRequests.size() + " expired punch requests for orgId=" + orgId);
+
+        // Process each expired request
+        for (PunchRequest request : expiredRequests) {
+            try {
+                processExpiredPunchRequest(orgId, request, today, zoneId);
+
+                // Mark request as EXPIRED
+                request.setState(PunchRequest.State.EXPIRED);
+                punchRequestRepository.save(request);
+
+                logger.info("Marked punch request " + request.getId() + " as EXPIRED");
+            } catch (Exception e) {
+                logger.error("Error processing expired punch request " + request.getId() + ": " + e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Process a single expired punch request.
+     * Resolves all account IDs based on entity type and marks missed punches.
+     */
+    @Transactional
+    public void processExpiredPunchRequest(Long orgId, PunchRequest request, LocalDate dateKey, ZoneId zoneId) {
+        // Resolve account IDs based on entity type
+        Set<Long> accountIds = resolveAccountIds(orgId, request.getEntityTypeId(), request.getEntityId());
+
+        if (accountIds.isEmpty()) {
+            logger.info("No accounts found for punch request " + request.getId());
+            return;
+        }
+
+        logger.info("Processing " + accountIds.size() + " accounts for punch request " + request.getId());
+
+        // For each account, check if they missed the punch
+        for (Long accountId : accountIds) {
+            try {
+                processMissedPunchForAccount(orgId, accountId, request, dateKey, zoneId);
+            } catch (Exception e) {
+                logger.error("Error processing missed punch for accountId=" + accountId +
+                           " in punch request " + request.getId() + ": " + e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * Resolve account IDs based on entity type and entity ID.
+     *
+     * For USER: Returns the entity ID directly as account ID.
+     * For TEAM/PROJECT/ORG: This is a simplified implementation that checks all unique account IDs
+     * from attendance events in the org. In production, this should use a dedicated UserService
+     * or AccountService to get all active users in the organization/team/project.
+     */
+    private Set<Long> resolveAccountIds(Long orgId, Integer entityTypeId, Long entityId) {
+        Set<Long> accountIds = new HashSet<>();
+
+        if (entityTypeId == EntityTypes.USER) {
+            // Direct user - entity ID is the account ID
+            accountIds.add(entityId);
+        } else if (entityTypeId == EntityTypes.TEAM) {
+            // Get all unique account IDs from attendance events for this org
+            // Then filter by team membership
+            Set<Long> allAccountIds = getAllAccountIdsInOrg(orgId);
+
+            for (Long accountId : allAccountIds) {
+                List<Long> teams = membershipProvider.listTeamsForUser(orgId, accountId);
+                if (teams.contains(entityId)) {
+                    accountIds.add(accountId);
+                }
+            }
+        } else if (entityTypeId == EntityTypes.PROJECT) {
+            // Get all unique account IDs from attendance events for this org
+            // Then filter by project membership
+            Set<Long> allAccountIds = getAllAccountIdsInOrg(orgId);
+
+            for (Long accountId : allAccountIds) {
+                List<Long> projects = membershipProvider.listProjectsForUser(orgId, accountId);
+                if (projects.contains(entityId)) {
+                    accountIds.add(accountId);
+                }
+            }
+        } else if (entityTypeId == EntityTypes.ORG) {
+            // Get all users in the organization
+            accountIds = getAllAccountIdsInOrg(orgId);
+        }
+
+        return accountIds;
+    }
+
+    /**
+     * Get all unique account IDs that have interacted with the attendance system for this org.
+     * This includes accounts from both attendance days and attendance events.
+     *
+     * NOTE: This is a workaround. In production, you should use a UserService or AccountService
+     * to get all active users in the organization, not just those with attendance records.
+     */
+    private Set<Long> getAllAccountIdsInOrg(Long orgId) {
+        Set<Long> accountIds = new HashSet<>();
+
+        // Get from attendance days
+        List<AttendanceDay> allDays = dayRepository.findAll();
+        accountIds.addAll(allDays.stream()
+                .filter(day -> day.getOrgId().equals(orgId))
+                .map(AttendanceDay::getAccountId)
+                .collect(Collectors.toSet()));
+
+        // Get from attendance events (to catch users who may have events but no day records yet)
+        List<AttendanceEvent> allEvents = eventRepository.findAll();
+        accountIds.addAll(allEvents.stream()
+                .filter(event -> event.getOrgId().equals(orgId))
+                .map(AttendanceEvent::getAccountId)
+                .collect(Collectors.toSet()));
+
+        return accountIds;
+    }
+
+    /**
+     * Process missed punch for a single account.
+     * Checks if user has checked in for the day and if they didn't respond to the punch request.
+     */
+    @Transactional
+    public void processMissedPunchForAccount(Long orgId, Long accountId, PunchRequest request,
+                                             LocalDate dateKey, ZoneId zoneId) {
+        // Get attendance day record for this user
+        Optional<AttendanceDay> dayRecordOpt = dayRepository.findByOrgIdAndAccountIdAndDateKey(orgId, accountId, dateKey);
+
+        if (!dayRecordOpt.isPresent()) {
+            // User hasn't checked in at all today, skip
+            return;
+        }
+
+        AttendanceDay dayRecord = dayRecordOpt.get();
+
+        // Check if user has checked in (has firstInUtc)
+        if (dayRecord.getFirstInUtc() == null) {
+            // User hasn't checked in, skip
+            return;
+        }
+
+        // Get all events for this user on this day
+        LocalDateTime dayStart = dateKey.atStartOfDay();
+        LocalDateTime dayEnd = dateKey.plusDays(1).atStartOfDay();
+        List<AttendanceEvent> events = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
+                orgId, accountId, dayStart, dayEnd);
+
+        // Check if user responded to this punch request
+        boolean hasResponded = events.stream()
+                .anyMatch(event -> {
+                    Long punchRequestId = event.getPunchRequestId();
+                    return punchRequestId != null && punchRequestId.equals(request.getId());
+                });
+
+        if (hasResponded) {
+            // User responded to the punch request, no need to mark as missed
+            logger.info("User " + accountId + " responded to punch request " + request.getId());
+            return;
+        }
+
+        // User missed the punch - create a missed punch event
+        createMissedPunchEvent(orgId, accountId, request, events);
+
+        logger.info("Marked missed punch for accountId=" + accountId + " for punch request " + request.getId());
+    }
+
+    /**
+     * Create a missed punch event.
+     */
+    private void createMissedPunchEvent(Long orgId, Long accountId, PunchRequest request,
+                                       List<AttendanceEvent> existingEvents) {
+        AttendanceEvent missedEvent = new AttendanceEvent();
+        missedEvent.setOrgId(orgId);
+        missedEvent.setAccountId(accountId);
+        missedEvent.setEventKind(EventKind.PUNCHED);  // Use PUNCHED kind for missed punches
+        missedEvent.setEventSource(EventSource.MANUAL);
+        missedEvent.setEventAction(EventAction.AUTO);
+        missedEvent.setTsUtc(LocalDateTime.now());
+        missedEvent.setSuccess(false);  // Marked as unsuccessful
+        missedEvent.setVerdict(IntegrityVerdict.FAIL);
+        missedEvent.setPunchRequestId(request.getId());
+        missedEvent.setRequesterAccountId(request.getRequesterAccountId());
+        missedEvent.setFailReason("Missed punch: User did not respond to punch request within time window");
+
+        // Add flags to indicate this was auto-generated as missed
+        Map<String, Object> flags = new HashMap<>();
+        flags.put("missed_punch", true);
+        flags.put("punch_request_id", request.getId());
+        flags.put("requested_datetime", request.getRequestedDatetime().toString());
+        flags.put("expired_at", request.getExpiresAt().toString());
+        missedEvent.setFlags(flags);
+
+        eventRepository.save(missedEvent);
     }
 }
