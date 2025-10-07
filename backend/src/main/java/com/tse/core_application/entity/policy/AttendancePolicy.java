@@ -74,6 +74,16 @@ public class AttendancePolicy {
     @Column(name = "max_working_hours_per_day", nullable = false)
     private Integer maxWorkingHoursPerDay = 10;
 
+    // Punch request respond within minutes configuration
+    @Column(name = "punch_respond_min_minutes", nullable = false)
+    private Integer punchRespondMinMinutes = 2;
+
+    @Column(name = "punch_respond_max_minutes", nullable = false)
+    private Integer punchRespondMaxMinutes = 20;
+
+    @Column(name = "punch_respond_default_minutes", nullable = false)
+    private Integer punchRespondDefaultMinutes = 10;
+
     // Legacy placeholders
     @Column(name = "dwell_in_min", nullable = false)
     private Integer dwellInMin = 3;

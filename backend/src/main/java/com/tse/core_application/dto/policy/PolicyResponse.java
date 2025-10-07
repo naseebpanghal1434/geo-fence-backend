@@ -45,6 +45,10 @@ public class PolicyResponse {
 
     private Integer maxWorkingHoursPerDay;
 
+    private Integer punchRespondMinMinutes;
+    private Integer punchRespondMaxMinutes;
+    private Integer punchRespondDefaultMinutes;
+
     private Integer dwellInMin;
     private Integer dwellOutMin;
     private Boolean autoOutEnabled;
@@ -80,6 +84,9 @@ public class PolicyResponse {
         response.setMaxSuccessfulPunchesPerDay(policy.getMaxSuccessfulPunchesPerDay());
         response.setMaxFailedPunchesPerDay(policy.getMaxFailedPunchesPerDay());
         response.setMaxWorkingHoursPerDay(policy.getMaxWorkingHoursPerDay());
+        response.setPunchRespondMinMinutes(policy.getPunchRespondMinMinutes());
+        response.setPunchRespondMaxMinutes(policy.getPunchRespondMaxMinutes());
+        response.setPunchRespondDefaultMinutes(policy.getPunchRespondDefaultMinutes());
         response.setDwellInMin(policy.getDwellInMin());
         response.setDwellOutMin(policy.getDwellOutMin());
         response.setAutoOutEnabled(policy.getAutoOutEnabled());

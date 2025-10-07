@@ -100,6 +100,25 @@ public class GeoFencingPolicyService {
             );
         }
 
+        // Validate punch respond minutes ordering: min <= default <= max
+        if (request.getPunchRespondMinMinutes() > request.getPunchRespondDefaultMinutes()) {
+            throw new ProblemException(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "Validation failed",
+                "punchRespondMinMinutes must be <= punchRespondDefaultMinutes"
+            );
+        }
+
+        if (request.getPunchRespondDefaultMinutes() > request.getPunchRespondMaxMinutes()) {
+            throw new ProblemException(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "Validation failed",
+                "punchRespondDefaultMinutes must be <= punchRespondMaxMinutes"
+            );
+        }
+
         // Update fields
         policy.setIsActive(request.getIsActive());
         policy.setOutsideFencePolicy(request.getOutsideFencePolicy());
@@ -115,6 +134,9 @@ public class GeoFencingPolicyService {
         policy.setMaxSuccessfulPunchesPerDay(request.getMaxSuccessfulPunchesPerDay());
         policy.setMaxFailedPunchesPerDay(request.getMaxFailedPunchesPerDay());
         policy.setMaxWorkingHoursPerDay(request.getMaxWorkingHoursPerDay());
+        policy.setPunchRespondMinMinutes(request.getPunchRespondMinMinutes());
+        policy.setPunchRespondMaxMinutes(request.getPunchRespondMaxMinutes());
+        policy.setPunchRespondDefaultMinutes(request.getPunchRespondDefaultMinutes());
         policy.setDwellInMin(request.getDwellInMin());
         policy.setDwellOutMin(request.getDwellOutMin());
         policy.setAutoOutEnabled(request.getAutoOutEnabled());

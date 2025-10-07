@@ -6,6 +6,8 @@ import com.tse.core_application.dto.punch.PunchRequestViewDto;
 import com.tse.core_application.entity.punch.PunchRequest;
 import com.tse.core_application.exception.ProblemException;
 import com.tse.core_application.repository.punch.PunchRequestRepository;
+import com.tse.core_application.entity.policy.AttendancePolicy;
+import com.tse.core_application.repository.policy.AttendancePolicyRepository;
 import com.tse.core_application.service.attendance.OfficePolicyProvider;
 import com.tse.core_application.service.membership.MembershipProvider;
 import com.tse.core_application.service.policy.PolicyGate;
@@ -36,6 +38,7 @@ public class PunchRequestService {
     private final MembershipProvider membershipProvider;
     private final PolicyGate policyGate;
     private final OfficePolicyProvider officePolicyProvider;
+    private final AttendancePolicyRepository attendancePolicyRepository;
 
     @Value("${attendance.punch.max-past-skew-minutes:5}")
     private int maxPastSkewMinutes;
@@ -46,17 +49,28 @@ public class PunchRequestService {
     public PunchRequestService(PunchRequestRepository punchRequestRepository,
                                MembershipProvider membershipProvider,
                                PolicyGate policyGate,
-                               OfficePolicyProvider officePolicyProvider) {
+                               OfficePolicyProvider officePolicyProvider,
+                               AttendancePolicyRepository attendancePolicyRepository) {
         this.punchRequestRepository = punchRequestRepository;
         this.membershipProvider = membershipProvider;
         this.policyGate = policyGate;
         this.officePolicyProvider = officePolicyProvider;
+        this.attendancePolicyRepository = attendancePolicyRepository;
     }
 
     @Transactional
     public PunchRequestViewDto createPunchRequest(long orgId, PunchRequestCreateDto dto, String timeZone) {
         // Check policy active
         policyGate.assertPolicyActive(orgId);
+
+        // Fetch attendance policy to get respondWithinMinutes constraints
+        AttendancePolicy policy = attendancePolicyRepository.findByOrgId(orgId)
+                .orElseThrow(() -> new ProblemException(
+                        HttpStatus.NOT_FOUND,
+                        "POLICY_NOT_FOUND",
+                        "Attendance policy not found",
+                        "No attendance policy found for organization " + orgId
+                ));
 
         // Validate entity type
         if (!EntityTypes.isValid(dto.getEntityTypeId())) {
@@ -78,13 +92,34 @@ public class PunchRequestService {
             );
         }
 
-        // Validate respond within minutes
+        // Validate respond within minutes against policy constraints
         if (dto.getRespondWithinMinutes() == null || dto.getRespondWithinMinutes() <= 0) {
             throw new ProblemException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_FAILED",
                     "Invalid respond time",
                     "respondWithinMinutes must be positive"
+            );
+        }
+
+        Integer minMinutes = policy.getPunchRespondMinMinutes();
+        Integer maxMinutes = policy.getPunchRespondMaxMinutes();
+
+        if (dto.getRespondWithinMinutes() < minMinutes) {
+            throw new ProblemException(
+                    HttpStatus.BAD_REQUEST,
+                    "VALIDATION_FAILED",
+                    "Respond time too short",
+                    "respondWithinMinutes must be at least " + minMinutes + " minutes (policy minimum)"
+            );
+        }
+
+        if (dto.getRespondWithinMinutes() > maxMinutes) {
+            throw new ProblemException(
+                    HttpStatus.BAD_REQUEST,
+                    "VALIDATION_FAILED",
+                    "Respond time too long",
+                    "respondWithinMinutes must be at most " + maxMinutes + " minutes (policy maximum)"
             );
         }
 
