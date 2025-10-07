@@ -553,6 +553,11 @@ public class AttendanceSchedulerService {
 
     /**
      * Resolve account IDs based on entity type and entity ID.
+     *
+     * For USER: Returns the entity ID directly as account ID.
+     * For TEAM/PROJECT/ORG: This is a simplified implementation that checks all unique account IDs
+     * from attendance events in the org. In production, this should use a dedicated UserService
+     * or AccountService to get all active users in the organization/team/project.
      */
     private Set<Long> resolveAccountIds(Long orgId, Integer entityTypeId, Long entityId) {
         Set<Long> accountIds = new HashSet<>();
@@ -561,14 +566,9 @@ public class AttendanceSchedulerService {
             // Direct user - entity ID is the account ID
             accountIds.add(entityId);
         } else if (entityTypeId == EntityTypes.TEAM) {
-            // Get all users in the team
-            // For now, we'll need to query all users and filter by membership
-            // This is a placeholder - in production, you'd have a method to get team members
-            List<AttendanceDay> allDays = dayRepository.findAll();
-            Set<Long> allAccountIds = allDays.stream()
-                    .filter(day -> day.getOrgId().equals(orgId))
-                    .map(AttendanceDay::getAccountId)
-                    .collect(Collectors.toSet());
+            // Get all unique account IDs from attendance events for this org
+            // Then filter by team membership
+            Set<Long> allAccountIds = getAllAccountIdsInOrg(orgId);
 
             for (Long accountId : allAccountIds) {
                 List<Long> teams = membershipProvider.listTeamsForUser(orgId, accountId);
@@ -577,12 +577,9 @@ public class AttendanceSchedulerService {
                 }
             }
         } else if (entityTypeId == EntityTypes.PROJECT) {
-            // Get all users in the project
-            List<AttendanceDay> allDays = dayRepository.findAll();
-            Set<Long> allAccountIds = allDays.stream()
-                    .filter(day -> day.getOrgId().equals(orgId))
-                    .map(AttendanceDay::getAccountId)
-                    .collect(Collectors.toSet());
+            // Get all unique account IDs from attendance events for this org
+            // Then filter by project membership
+            Set<Long> allAccountIds = getAllAccountIdsInOrg(orgId);
 
             for (Long accountId : allAccountIds) {
                 List<Long> projects = membershipProvider.listProjectsForUser(orgId, accountId);
@@ -592,12 +589,35 @@ public class AttendanceSchedulerService {
             }
         } else if (entityTypeId == EntityTypes.ORG) {
             // Get all users in the organization
-            List<AttendanceDay> allDays = dayRepository.findAll();
-            accountIds = allDays.stream()
-                    .filter(day -> day.getOrgId().equals(orgId))
-                    .map(AttendanceDay::getAccountId)
-                    .collect(Collectors.toSet());
+            accountIds = getAllAccountIdsInOrg(orgId);
         }
+
+        return accountIds;
+    }
+
+    /**
+     * Get all unique account IDs that have interacted with the attendance system for this org.
+     * This includes accounts from both attendance days and attendance events.
+     *
+     * NOTE: This is a workaround. In production, you should use a UserService or AccountService
+     * to get all active users in the organization, not just those with attendance records.
+     */
+    private Set<Long> getAllAccountIdsInOrg(Long orgId) {
+        Set<Long> accountIds = new HashSet<>();
+
+        // Get from attendance days
+        List<AttendanceDay> allDays = dayRepository.findAll();
+        accountIds.addAll(allDays.stream()
+                .filter(day -> day.getOrgId().equals(orgId))
+                .map(AttendanceDay::getAccountId)
+                .collect(Collectors.toSet()));
+
+        // Get from attendance events (to catch users who may have events but no day records yet)
+        List<AttendanceEvent> allEvents = eventRepository.findAll();
+        accountIds.addAll(allEvents.stream()
+                .filter(event -> event.getOrgId().equals(orgId))
+                .map(AttendanceEvent::getAccountId)
+                .collect(Collectors.toSet()));
 
         return accountIds;
     }
