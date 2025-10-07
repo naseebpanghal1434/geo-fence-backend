@@ -1,9 +1,12 @@
 package com.tse.core_application.controller.attendance;
 
+import com.tse.core_application.dto.attendance.AttendanceDataRequest;
+import com.tse.core_application.dto.attendance.AttendanceDataResponse;
 import com.tse.core_application.dto.attendance.PunchCreateRequest;
 import com.tse.core_application.dto.attendance.PunchedEventRequest;
 import com.tse.core_application.dto.attendance.PunchResponse;
 import com.tse.core_application.dto.attendance.TodaySummaryResponse;
+import com.tse.core_application.service.attendance.AttendanceDataService;
 import com.tse.core_application.service.attendance.AttendanceService;
 import com.tse.core_application.service.preference.GeoFencingAccessService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,14 +37,17 @@ public class AttendanceController {
     private final UserService userService;
     private final RequestHeaderHandler requestHeaderHandler;
     private final AttendanceService attendanceService;
+    private final AttendanceDataService attendanceDataService;
     private final GeoFencingAccessService geoFencingAccessService;
 
     public AttendanceController(JwtUtil jwtUtil, UserService userService, RequestHeaderHandler requestHeaderHandler,
-                               AttendanceService attendanceService, GeoFencingAccessService geoFencingAccessService) {
+                               AttendanceService attendanceService, AttendanceDataService attendanceDataService,
+                               GeoFencingAccessService geoFencingAccessService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
         this.requestHeaderHandler = requestHeaderHandler;
         this.attendanceService = attendanceService;
+        this.attendanceDataService = attendanceDataService;
         this.geoFencingAccessService = geoFencingAccessService;
     }
 
@@ -184,6 +190,57 @@ public class AttendanceController {
             e.printStackTrace();
             String allStackTraces = StackTraceHandler.getAllStackTraces(e);
             logger.error(httpRequest.getRequestURI() + " API: " + "Something went wrong: Not able to get today summary for username = "
+                    + foundUser.getPrimaryEmail() + "Caught Exception: " + e, new Throwable(allStackTraces));
+            ThreadContext.clearMap();
+            if (e.getMessage() == null) throw new InternalServerErrorException("Internal Server Error!");
+            else throw e;
+        }
+    }
+
+    /**
+     * POST /api/orgs/{orgId}/attendance/data
+     * Get comprehensive attendance data for given date range and account IDs.
+     * Provides single source for all views: detailed list, grid, and drill-down.
+     */
+    @PostMapping("/data")
+    @Operation(summary = "Get comprehensive attendance data",
+               description = "Get attendance data for date range including summary, detailed rows, grid, and drill-down")
+    public ResponseEntity<Object> getAttendanceData(
+            @Parameter(description = "Organization ID", required = true)
+            @PathVariable("orgId") Long orgId,
+            @Parameter(description = "Attendance data request", required = true)
+            @Valid @RequestBody AttendanceDataRequest request,
+            @RequestHeader(name = "screenName") String screenName,
+            @RequestHeader(name = "timeZone") String timeZone,
+            @RequestHeader(name = "accountIds") String accountIds,
+            HttpServletRequest httpRequest) {
+
+        long startTime = System.currentTimeMillis();
+        String jwtToken = httpRequest.getHeader("Authorization").substring(7);
+        String tokenUsername = jwtUtil.getUsernameFromToken(jwtToken);
+        User foundUser = userService.getUserByUserName(tokenUsername);
+        ThreadContext.put("accountId", requestHeaderHandler.getAccountIdFromRequestHeader(accountIds).toString());
+        ThreadContext.put("userId", foundUser.getUserId().toString());
+        ThreadContext.put("requestOriginatingPage", screenName);
+        logger.info("Entered" + '"' + " getAttendanceData" + '"' + " method ...");
+
+        try {
+            // Validate geo-fencing access for the organization
+            geoFencingAccessService.validateGeoFencingAccess(orgId);
+
+            // Ensure orgId in request matches path variable
+            request.setOrgId(orgId);
+
+            AttendanceDataResponse response = attendanceDataService.getAttendanceData(request);
+            long estimatedTime = System.currentTimeMillis() - startTime;
+            ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
+            logger.info("Exited" + '"' + " getAttendanceData" + '"' + " method because completed successfully ...");
+            ThreadContext.clearMap();
+            return CustomResponseHandler.generateCustomResponse(HttpStatus.OK, Constants.FormattedResponse.SUCCESS, response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            String allStackTraces = StackTraceHandler.getAllStackTraces(e);
+            logger.error(httpRequest.getRequestURI() + " API: " + "Something went wrong: Not able to get attendance data for username = "
                     + foundUser.getPrimaryEmail() + "Caught Exception: " + e, new Throwable(allStackTraces));
             ThreadContext.clearMap();
             if (e.getMessage() == null) throw new InternalServerErrorException("Internal Server Error!");
