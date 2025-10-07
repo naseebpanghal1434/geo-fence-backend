@@ -76,6 +76,19 @@ public class PolicyUpdateRequest {
     @Min(0)
     private Integer maxWorkingHoursPerDay;
 
+    // Punch request respond within minutes configuration
+    @NotNull
+    @Min(1)
+    private Integer punchRespondMinMinutes;
+
+    @NotNull
+    @Min(1)
+    private Integer punchRespondMaxMinutes;
+
+    @NotNull
+    @Min(1)
+    private Integer punchRespondDefaultMinutes;
+
     // Legacy placeholders
     @NotNull
     @Min(0)
