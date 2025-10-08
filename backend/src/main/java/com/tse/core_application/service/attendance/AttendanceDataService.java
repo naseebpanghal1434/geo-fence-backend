@@ -326,7 +326,7 @@ public class AttendanceDataService {
                     .getOrDefault(date, Collections.emptyList());
             AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
 
-            String status = determineStatus(date, events, day, policy, userTimeZone);
+            String status = determineStatus(date, events, day, policy, userTimeZone, request.getOrgId());
 
             switch (status) {
                 case "PRESENT":
@@ -340,6 +340,12 @@ public class AttendanceDataService {
                     break;
                 case "ABSENT":
                     absent++;
+                    break;
+                case "PENDING":
+                    // Today before office hours - don't count in any category yet
+                    break;
+                case "NOT_MARKED":
+                    // Future date - don't count in any category
                     break;
             }
 
@@ -539,7 +545,7 @@ public class AttendanceDataService {
         }
 
         // Status
-        String status = determineStatus(date, events, day, policy, userTimeZone);
+        String status = determineStatus(date, events, day, policy, userTimeZone, orgId);
         userData.setStatus(status);
 
         // Flags (with contextual information for special days)
@@ -737,12 +743,34 @@ public class AttendanceDataService {
         return breaks;
     }
 
-    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy, String userTimeZone) {
+    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy, String userTimeZone, Long orgId) {
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
         AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
 
+        // Determine if this date is today or future in user's timezone
+        LocalDate todayInUserTZ = LocalDate.now(ZoneId.of(userTimeZone));
+        boolean isToday = date.equals(todayInUserTZ);
+        boolean isFuture = date.isAfter(todayInUserTZ);
+
         // Absent if no check-in
         if (checkInEvent == null) {
+            // For future dates: Don't mark as absent (attendance can't be marked yet)
+            if (isFuture) {
+                return "NOT_MARKED"; // Future date - no attendance expected
+            }
+
+            // For today: Only mark as absent if office start time has passed
+            if (isToday) {
+                LocalTime currentTimeInUserTZ = LocalTime.now(ZoneId.of(userTimeZone));
+                LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
+
+                // If current time is before office start, don't mark as absent yet
+                if (currentTimeInUserTZ.isBefore(officeStartTime)) {
+                    return "PENDING"; // Before office hours - status pending
+                }
+            }
+
+            // For past dates or today after office start: Mark as absent
             return "ABSENT";
         }
 
@@ -753,6 +781,17 @@ public class AttendanceDataService {
 
         // Partial if no check-out or insufficient effort
         if (checkOutEvent == null) {
+            // For today: Only mark as partial if office end time has passed
+            if (isToday) {
+                LocalTime currentTimeInUserTZ = LocalTime.now(ZoneId.of(userTimeZone));
+                LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+
+                // If current time is before office end, status is still in progress
+                if (currentTimeInUserTZ.isBefore(officeEndTime)) {
+                    return "PRESENT"; // During work hours - consider as present
+                }
+            }
+
             return "PARTIAL";
         }
 
