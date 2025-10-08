@@ -10,7 +10,8 @@ import java.util.Map;
 
 /**
  * Comprehensive response DTO for Attendance Data API.
- * Provides everything the frontend needs: summary, detailed list, grid, and drill-down.
+ * Single hierarchical structure organized by date, then by user.
+ * Frontend can extract any view (list, grid, drill-down) from this structure.
  */
 @Getter
 @Setter
@@ -18,17 +19,11 @@ import java.util.Map;
 @AllArgsConstructor
 public class AttendanceDataResponse {
 
-    // A) Summary section (for header chips)
+    // Summary section (for header chips)
     private SummarySection summary;
 
-    // B) Detailed list rows (per user, per date)
-    private List<DetailedRow> detailedRows;
-
-    // C) Grid matrix (user × date)
-    private List<GridRow> gridRows;
-
-    // D) Drill-down data (per user, per date)
-    private Map<String, DrillDownData> drillDownMap; // key: "accountId_date"
+    // Unified attendance data organized by date, then by user
+    private List<DailyAttendanceData> attendanceData;
 
     /**
      * Summary section for the entire date range and per date.
@@ -61,42 +56,55 @@ public class AttendanceDataResponse {
     }
 
     /**
-     * Detailed row for a specific user on a specific date.
+     * Attendance data for a specific date.
+     * Contains summary for the date and list of all users' attendance.
      */
     @Getter
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class DetailedRow {
+    public static class DailyAttendanceData {
+        private String date; // yyyy-MM-dd
+        private DateSummary dateSummary;
+        private List<UserAttendanceData> userAttendance; // Sorted by accountId ascending
+    }
+
+    /**
+     * Complete attendance data for a single user on a specific date.
+     * Combines detailed info, status, and full punch timeline.
+     */
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class UserAttendanceData {
         // Identity
         private Long accountId;
-        private String displayName;
-        private String avatar;
-        private String teamName;
-
-        // Date
-        private String date; // yyyy-MM-dd
-
-        // Times (HH:mm:ss format in user timezone)
-        private String checkInTime;  // null if missing
-        private String checkOutTime; // null if missing
-
-        // Breaks
-        private Integer totalBreakMinutes;
-        private List<BreakInterval> breaks;
-
-        // Totals
-        private Integer totalHoursMinutes; // total minutes worked
-        private Integer totalEffortMinutes; // total effort (total - break)
-
-        // Location
-        private String primaryFenceName; // fence/site name for check-in/out
+        private String displayName; // From bulk user lookup
 
         // Status
         private String status; // PRESENT, LATE, PARTIAL, ABSENT, LEAVE, HOLIDAY
 
-        // Flags
+        // Times (HH:mm:ss format)
+        private String checkInTime;  // null if missing
+        private String checkOutTime; // null if missing
+
+        // Totals (in minutes)
+        private Integer totalHoursMinutes;
+        private Integer totalEffortMinutes;
+        private Integer totalBreakMinutes;
+
+        // Breaks
+        private List<BreakInterval> breaks;
+
+        // Location
+        private String primaryFenceName; // fence/site name for check-in/out
+
+        // Flags/Warnings
         private List<String> flags; // e.g., "Late check-in", "Outside fence", "Integrity warn"
+
+        // Full punch timeline (all events with date+time, sorted chronologically)
+        private List<PunchEvent> timeline;
     }
 
     /**
@@ -113,67 +121,8 @@ public class AttendanceDataResponse {
     }
 
     /**
-     * Grid row for a user across multiple dates.
-     */
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class GridRow {
-        private Long accountId;
-        private String displayName;
-        private Map<String, GridCell> dateCells; // key: date (yyyy-MM-dd)
-    }
-
-    /**
-     * Grid cell for a specific user on a specific date.
-     */
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class GridCell {
-        private String status; // PRESENT, ABSENT, LEAVE, HOLIDAY, PARTIAL, LATE
-        private String badge;  // optional badge code (e.g., "LATE_IN", "OUTSIDE_FENCE")
-    }
-
-    /**
-     * Drill-down data for a specific user on a specific date.
-     */
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class DrillDownData {
-        private Long accountId;
-        private String date; // yyyy-MM-dd
-
-        // Computed summary for the day
-        private DaySummary daySummary;
-
-        // Full punch timeline
-        private List<PunchEvent> timeline;
-    }
-
-    /**
-     * Day summary in drill-down.
-     */
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class DaySummary {
-        private String checkInTime;  // HH:mm:ss
-        private String checkOutTime; // HH:mm:ss
-        private Integer totalHoursMinutes;
-        private Integer totalEffortMinutes;
-        private Integer breakMinutes;
-        private Integer officeHoursMinutes; // expected hours from policy
-        private String notes; // any additional notes
-    }
-
-    /**
-     * Punch event in drill-down timeline.
+     * Punch event in timeline.
+     * Includes all event types and missing events.
      */
     @Getter
     @Setter
@@ -182,7 +131,7 @@ public class AttendanceDataResponse {
     public static class PunchEvent {
         private Long eventId;
         private String type; // CHECK_IN, CHECK_OUT, BREAK_START, BREAK_END, PUNCHED, MISSING_CHECK_IN, MISSING_CHECK_OUT
-        private String time; // HH:mm:ss
+        private String dateTime; // yyyy-MM-dd HH:mm:ss (full date and time)
         private String attemptStatus; // SUCCESSFUL, UNSUCCESSFUL, IGNORED, MISSING
         private String locationLabel; // fence/site or "X km away"
         private Double lat;

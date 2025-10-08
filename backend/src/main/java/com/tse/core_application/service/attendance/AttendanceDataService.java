@@ -1,7 +1,6 @@
 package com.tse.core_application.service.attendance;
 
 import com.tse.core_application.constants.EntityTypes;
-import com.tse.core_application.constants.attendance.AttendanceStatus;
 import com.tse.core_application.constants.attendance.EventKind;
 import com.tse.core_application.dto.attendance.AttendanceDataRequest;
 import com.tse.core_application.dto.attendance.AttendanceDataResponse;
@@ -34,7 +33,7 @@ import java.util.stream.Collectors;
 
 /**
  * Service for comprehensive attendance data API.
- * Provides single source for all attendance views: detailed list, grid, and drill-down.
+ * Provides single hierarchical structure organized by date, then by user.
  */
 @Service
 public class AttendanceDataService {
@@ -42,6 +41,7 @@ public class AttendanceDataService {
     private static final Logger logger = LoggerFactory.getLogger(AttendanceDataService.class);
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final AttendanceEventRepository eventRepository;
     private final AttendanceDayRepository dayRepository;
@@ -94,33 +94,54 @@ public class AttendanceDataService {
                         "No attendance policy found for org: " + request.getOrgId()
                 ));
 
-        // 4. Load all events for the date range and account IDs
+        // 4. Load user names in bulk (optimization)
+        Map<Long, String> userNamesMap = getUserNamesMap(request.getAccountIds());
+
+        // 5. Load all events for the date range and account IDs
         Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap = loadEvents(
                 request.getOrgId(), request.getAccountIds(), fromDate, toDate);
 
-        // 5. Load all attendance days for the date range and account IDs
+        // 6. Load all attendance days for the date range and account IDs
         Map<Long, Map<LocalDate, AttendanceDay>> daysMap = loadAttendanceDays(
                 request.getOrgId(), request.getAccountIds(), fromDate, toDate);
 
-        // 6. Load fences for location labels
+        // 7. Load fences for location labels
         Map<Long, GeoFence> fenceMap = loadFences(request.getOrgId());
 
-        // 7. Build response
+        // 8. Build response
         AttendanceDataResponse response = new AttendanceDataResponse();
 
         // A) Build summary section
         response.setSummary(buildSummarySection(request, fromDate, toDate, eventsMap, daysMap, policy));
 
-        // B) Build detailed rows
-        response.setDetailedRows(buildDetailedRows(request, fromDate, toDate, eventsMap, daysMap, fenceMap, policy));
-
-        // C) Build grid rows
-        response.setGridRows(buildGridRows(request, fromDate, toDate, eventsMap, daysMap, policy));
-
-        // D) Build drill-down map
-        response.setDrillDownMap(buildDrillDownMap(request, fromDate, toDate, eventsMap, daysMap, fenceMap, policy));
+        // B) Build unified attendance data (sorted by date, then by accountId)
+        response.setAttendanceData(buildAttendanceData(
+                request, fromDate, toDate, eventsMap, daysMap, fenceMap, policy, userNamesMap));
 
         return response;
+    }
+
+    /**
+     * Bulk user name resolver to avoid N queries.
+     * Returns map of accountId -> displayName.
+     */
+    private Map<Long, String> getUserNamesMap(List<Long> accountIds) {
+        Map<Long, String> namesMap = new HashMap<>();
+
+        // TODO: Implement bulk user name lookup from user service/repository
+        // Example implementation:
+        // List<User> users = userRepository.findAllById(accountIds);
+        // for (User user : users) {
+        //     String displayName = user.getFirstName() + " " + user.getLastName();
+        //     namesMap.put(user.getAccountId(), displayName);
+        // }
+
+        // Placeholder: return "User {accountId}" for now
+        for (Long accountId : accountIds) {
+            namesMap.put(accountId, "User " + accountId);
+        }
+
+        return namesMap;
     }
 
     private void validateRequest(AttendanceDataRequest request) {
@@ -311,39 +332,67 @@ public class AttendanceDataService {
         return summary;
     }
 
-    private List<AttendanceDataResponse.DetailedRow> buildDetailedRows(
+    /**
+     * Build unified attendance data organized by date (ascending), then by user (ascending by accountId).
+     */
+    private List<AttendanceDataResponse.DailyAttendanceData> buildAttendanceData(
             AttendanceDataRequest request, LocalDate fromDate, LocalDate toDate,
             Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
             Map<Long, GeoFence> fenceMap,
-            AttendancePolicy policy) {
+            AttendancePolicy policy,
+            Map<Long, String> userNamesMap) {
 
-        List<AttendanceDataResponse.DetailedRow> rows = new ArrayList<>();
+        List<AttendanceDataResponse.DailyAttendanceData> attendanceData = new ArrayList<>();
 
-        for (Long accountId : request.getAccountIds()) {
-            LocalDate currentDate = fromDate;
-            while (!currentDate.isAfter(toDate)) {
-                AttendanceDataResponse.DetailedRow row = buildDetailedRow(
-                        request.getOrgId(), accountId, currentDate, eventsMap, daysMap, fenceMap, policy);
+        // Iterate through dates in ascending order
+        LocalDate currentDate = fromDate;
+        while (!currentDate.isAfter(toDate)) {
+            AttendanceDataResponse.DailyAttendanceData dailyData = new AttendanceDataResponse.DailyAttendanceData();
+            dailyData.setDate(currentDate.format(DATE_FORMATTER));
 
-                // Only add non-weekend rows
-                if (row != null) {
-                    rows.add(row);
+            // Compute date summary
+            AttendanceDataResponse.DateSummary dateSummary = computeDateSummary(
+                    request, currentDate, eventsMap, daysMap, policy);
+            dailyData.setDateSummary(dateSummary);
+
+            // Build user attendance list (sorted by accountId)
+            List<AttendanceDataResponse.UserAttendanceData> userAttendanceList = new ArrayList<>();
+
+            // Sort accountIds in ascending order
+            List<Long> sortedAccountIds = new ArrayList<>(request.getAccountIds());
+            Collections.sort(sortedAccountIds);
+
+            for (Long accountId : sortedAccountIds) {
+                AttendanceDataResponse.UserAttendanceData userAttendance = buildUserAttendanceData(
+                        request.getOrgId(), accountId, currentDate,
+                        eventsMap, daysMap, fenceMap, policy, userNamesMap);
+
+                // Only add non-weekend entries
+                if (userAttendance != null) {
+                    userAttendanceList.add(userAttendance);
                 }
-
-                currentDate = currentDate.plusDays(1);
             }
+
+            dailyData.setUserAttendance(userAttendanceList);
+            attendanceData.add(dailyData);
+
+            currentDate = currentDate.plusDays(1);
         }
 
-        return rows;
+        return attendanceData;
     }
 
-    private AttendanceDataResponse.DetailedRow buildDetailedRow(
+    /**
+     * Build complete attendance data for a single user on a specific date.
+     */
+    private AttendanceDataResponse.UserAttendanceData buildUserAttendanceData(
             Long orgId, Long accountId, LocalDate date,
             Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
             Map<Long, GeoFence> fenceMap,
-            AttendancePolicy policy) {
+            AttendancePolicy policy,
+            Map<Long, String> userNamesMap) {
 
         HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
 
@@ -356,242 +405,86 @@ public class AttendanceDataService {
                 .getOrDefault(date, Collections.emptyList());
         AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
 
-        AttendanceDataResponse.DetailedRow row = new AttendanceDataResponse.DetailedRow();
-        row.setAccountId(accountId);
-        // TODO: Fetch display name, avatar, team name from user service
-        row.setDisplayName("User " + accountId);
-        row.setAvatar(null);
-        row.setTeamName(null);
-        row.setDate(date.format(DATE_FORMATTER));
+        AttendanceDataResponse.UserAttendanceData userData = new AttendanceDataResponse.UserAttendanceData();
+        userData.setAccountId(accountId);
+        userData.setDisplayName(userNamesMap.getOrDefault(accountId, "User " + accountId));
 
         // Handle holiday status
         if (holidayInfo.isPublicHoliday()) {
-            row.setStatus("HOLIDAY");
-            row.setCheckInTime(null);
-            row.setCheckOutTime(null);
-            row.setTotalBreakMinutes(0);
-            row.setBreaks(Collections.emptyList());
-            row.setTotalHoursMinutes(0);
-            row.setTotalEffortMinutes(0);
-            row.setPrimaryFenceName(null);
-            row.setFlags(Collections.emptyList());
-            return row;
+            userData.setStatus("HOLIDAY");
+            userData.setCheckInTime(null);
+            userData.setCheckOutTime(null);
+            userData.setTotalHoursMinutes(0);
+            userData.setTotalEffortMinutes(0);
+            userData.setTotalBreakMinutes(0);
+            userData.setBreaks(Collections.emptyList());
+            userData.setPrimaryFenceName(null);
+            userData.setFlags(Collections.emptyList());
+            userData.setTimeline(Collections.emptyList());
+            return userData;
         }
 
         // Handle leave status
         if (holidayInfo.isOnLeave()) {
-            row.setStatus("LEAVE");
-            row.setCheckInTime(null);
-            row.setCheckOutTime(null);
-            row.setTotalBreakMinutes(0);
-            row.setBreaks(Collections.emptyList());
-            row.setTotalHoursMinutes(0);
-            row.setTotalEffortMinutes(0);
-            row.setPrimaryFenceName(null);
-            // TODO: Add leave type name from entity preference
-            row.setFlags(Collections.singletonList("Leave: " + (holidayInfo.getLeaveName() != null ? holidayInfo.getLeaveName() : "Approved")));
-            return row;
+            userData.setStatus("LEAVE");
+            userData.setCheckInTime(null);
+            userData.setCheckOutTime(null);
+            userData.setTotalHoursMinutes(0);
+            userData.setTotalEffortMinutes(0);
+            userData.setTotalBreakMinutes(0);
+            userData.setBreaks(Collections.emptyList());
+            userData.setPrimaryFenceName(null);
+            userData.setFlags(Collections.singletonList("Leave: " + (holidayInfo.getLeaveName() != null ? holidayInfo.getLeaveName() : "Approved")));
+            userData.setTimeline(Collections.emptyList());
+            return userData;
         }
 
         // Find check-in and check-out events
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
         AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
 
-        row.setCheckInTime(checkInEvent != null ? checkInEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
-        row.setCheckOutTime(checkOutEvent != null ? checkOutEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
+        userData.setCheckInTime(checkInEvent != null ? checkInEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
+        userData.setCheckOutTime(checkOutEvent != null ? checkOutEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
 
         // Breaks
         List<AttendanceDataResponse.BreakInterval> breaks = extractBreaks(events);
         int totalBreakMinutes = breaks.stream()
                 .mapToInt(AttendanceDataResponse.BreakInterval::getDurationMinutes)
                 .sum();
-        row.setTotalBreakMinutes(totalBreakMinutes);
-        row.setBreaks(breaks);
+        userData.setTotalBreakMinutes(totalBreakMinutes);
+        userData.setBreaks(breaks);
 
         // Totals
         if (day != null) {
-            row.setTotalHoursMinutes(day.getWorkedSeconds() / 60);
-            row.setTotalEffortMinutes((day.getWorkedSeconds() - day.getBreakSeconds()) / 60);
+            userData.setTotalHoursMinutes(day.getWorkedSeconds() / 60);
+            userData.setTotalEffortMinutes((day.getWorkedSeconds() - day.getBreakSeconds()) / 60);
         } else {
-            row.setTotalHoursMinutes(0);
-            row.setTotalEffortMinutes(0);
+            userData.setTotalHoursMinutes(0);
+            userData.setTotalEffortMinutes(0);
         }
 
         // Location
         if (checkInEvent != null && checkInEvent.getFenceId() != null) {
             GeoFence fence = fenceMap.get(checkInEvent.getFenceId());
-            row.setPrimaryFenceName(fence != null ? fence.getName() : "Unknown");
+            userData.setPrimaryFenceName(fence != null ? fence.getName() : "Unknown");
         } else {
-            row.setPrimaryFenceName(null);
+            userData.setPrimaryFenceName(null);
         }
 
         // Status
         String status = determineStatus(date, events, day, policy);
-        row.setStatus(status);
+        userData.setStatus(status);
 
         // Flags
         List<String> flags = extractFlags(events, checkInEvent, checkOutEvent, policy);
-        row.setFlags(flags);
+        userData.setFlags(flags);
 
-        return row;
-    }
+        // Timeline (all punches with date+time, sorted chronologically)
+        List<AttendanceDataResponse.PunchEvent> timeline = buildTimeline(
+                events, fenceMap, policy, date, checkInEvent, checkOutEvent);
+        userData.setTimeline(timeline);
 
-    private List<AttendanceDataResponse.GridRow> buildGridRows(
-            AttendanceDataRequest request, LocalDate fromDate, LocalDate toDate,
-            Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
-            Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            AttendancePolicy policy) {
-
-        List<AttendanceDataResponse.GridRow> gridRows = new ArrayList<>();
-
-        for (Long accountId : request.getAccountIds()) {
-            AttendanceDataResponse.GridRow gridRow = new AttendanceDataResponse.GridRow();
-            gridRow.setAccountId(accountId);
-            // TODO: Fetch display name from user service
-            gridRow.setDisplayName("User " + accountId);
-
-            Map<String, AttendanceDataResponse.GridCell> dateCells = new HashMap<>();
-
-            LocalDate currentDate = fromDate;
-            while (!currentDate.isAfter(toDate)) {
-                AttendanceDataResponse.GridCell cell = buildGridCell(
-                        request.getOrgId(), accountId, currentDate, eventsMap, daysMap, policy);
-                dateCells.put(currentDate.format(DATE_FORMATTER), cell);
-
-                currentDate = currentDate.plusDays(1);
-            }
-
-            gridRow.setDateCells(dateCells);
-            gridRows.add(gridRow);
-        }
-
-        return gridRows;
-    }
-
-    private AttendanceDataResponse.GridCell buildGridCell(
-            Long orgId, Long accountId, LocalDate date,
-            Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
-            Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            AttendancePolicy policy) {
-
-        HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
-
-        // Weekend - return null status
-        if (holidayInfo.isWeekend()) {
-            return new AttendanceDataResponse.GridCell(null, null);
-        }
-
-        if (holidayInfo.isPublicHoliday()) {
-            return new AttendanceDataResponse.GridCell("HOLIDAY", null);
-        }
-
-        if (holidayInfo.isOnLeave()) {
-            return new AttendanceDataResponse.GridCell("LEAVE", null);
-        }
-
-        List<AttendanceEvent> events = eventsMap.getOrDefault(accountId, Collections.emptyMap())
-                .getOrDefault(date, Collections.emptyList());
-        AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
-
-        String status = determineStatus(date, events, day, policy);
-
-        // Determine badge
-        String badge = null;
-        AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
-        if (checkInEvent != null && isLateCheckIn(checkInEvent, policy)) {
-            badge = "LATE_IN";
-        } else if (checkInEvent != null && !checkInEvent.getUnderRange()) {
-            badge = "OUTSIDE_FENCE";
-        }
-
-        return new AttendanceDataResponse.GridCell(status, badge);
-    }
-
-    private Map<String, AttendanceDataResponse.DrillDownData> buildDrillDownMap(
-            AttendanceDataRequest request, LocalDate fromDate, LocalDate toDate,
-            Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
-            Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            Map<Long, GeoFence> fenceMap,
-            AttendancePolicy policy) {
-
-        Map<String, AttendanceDataResponse.DrillDownData> drillDownMap = new HashMap<>();
-
-        for (Long accountId : request.getAccountIds()) {
-            LocalDate currentDate = fromDate;
-            while (!currentDate.isAfter(toDate)) {
-                AttendanceDataResponse.DrillDownData drillDown = buildDrillDownData(
-                        request.getOrgId(), accountId, currentDate, eventsMap, daysMap, fenceMap, policy);
-
-                if (drillDown != null) {
-                    String key = accountId + "_" + currentDate.format(DATE_FORMATTER);
-                    drillDownMap.put(key, drillDown);
-                }
-
-                currentDate = currentDate.plusDays(1);
-            }
-        }
-
-        return drillDownMap;
-    }
-
-    private AttendanceDataResponse.DrillDownData buildDrillDownData(
-            Long orgId, Long accountId, LocalDate date,
-            Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
-            Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            Map<Long, GeoFence> fenceMap,
-            AttendancePolicy policy) {
-
-        HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
-
-        // Skip weekends
-        if (holidayInfo.isWeekend()) {
-            return null;
-        }
-
-        List<AttendanceEvent> events = eventsMap.getOrDefault(accountId, Collections.emptyMap())
-                .getOrDefault(date, Collections.emptyList());
-        AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
-
-        AttendanceDataResponse.DrillDownData drillDown = new AttendanceDataResponse.DrillDownData();
-        drillDown.setAccountId(accountId);
-        drillDown.setDate(date.format(DATE_FORMATTER));
-
-        // Day summary
-        AttendanceDataResponse.DaySummary daySummary = new AttendanceDataResponse.DaySummary();
-        AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
-        AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
-
-        daySummary.setCheckInTime(checkInEvent != null ? checkInEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
-        daySummary.setCheckOutTime(checkOutEvent != null ? checkOutEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
-
-        if (day != null) {
-            daySummary.setTotalHoursMinutes(day.getWorkedSeconds() / 60);
-            daySummary.setTotalEffortMinutes((day.getWorkedSeconds() - day.getBreakSeconds()) / 60);
-            daySummary.setBreakMinutes(day.getBreakSeconds() / 60);
-        } else {
-            daySummary.setTotalHoursMinutes(0);
-            daySummary.setTotalEffortMinutes(0);
-            daySummary.setBreakMinutes(0);
-        }
-
-        // TODO: Calculate office hours from policy (e.g., 9 hours = 540 minutes)
-        daySummary.setOfficeHoursMinutes(policy.getMaxWorkingHoursPerDay() * 60);
-
-        if (holidayInfo.isPublicHoliday()) {
-            daySummary.setNotes("Public Holiday");
-        } else if (holidayInfo.isOnLeave()) {
-            daySummary.setNotes("On Leave: " + (holidayInfo.getLeaveName() != null ? holidayInfo.getLeaveName() : "Approved"));
-        } else {
-            daySummary.setNotes(null);
-        }
-
-        drillDown.setDaySummary(daySummary);
-
-        // Timeline
-        List<AttendanceDataResponse.PunchEvent> timeline = buildTimeline(events, fenceMap, policy, date, checkInEvent, checkOutEvent);
-        drillDown.setTimeline(timeline);
-
-        return drillDown;
+        return userData;
     }
 
     private List<AttendanceDataResponse.PunchEvent> buildTimeline(
@@ -601,12 +494,12 @@ public class AttendanceDataService {
 
         List<AttendanceDataResponse.PunchEvent> timeline = new ArrayList<>();
 
-        // Add actual events
+        // Add actual events (sorted by timestamp)
         for (AttendanceEvent event : events) {
             AttendanceDataResponse.PunchEvent punchEvent = new AttendanceDataResponse.PunchEvent();
             punchEvent.setEventId(event.getId());
             punchEvent.setType(event.getEventKind().name());
-            punchEvent.setTime(event.getTsUtc().toLocalTime().format(TIME_FORMATTER));
+            punchEvent.setDateTime(event.getTsUtc().format(DATETIME_FORMATTER)); // Full date+time
             punchEvent.setAttemptStatus(event.getSuccess() ? "SUCCESSFUL" : "UNSUCCESSFUL");
 
             // Location label
@@ -643,7 +536,7 @@ public class AttendanceDataService {
             AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
             missingCheckIn.setEventId(null);
             missingCheckIn.setType("MISSING_CHECK_IN");
-            missingCheckIn.setTime(null);
+            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
             missingCheckIn.setAttemptStatus("MISSING");
             missingCheckIn.setLocationLabel("No check-in recorded");
             missingCheckIn.setLat(null);
@@ -652,15 +545,29 @@ public class AttendanceDataService {
             missingCheckIn.setIntegrityVerdict(null);
             missingCheckIn.setFailReason("User did not check in");
             timeline.add(0, missingCheckIn);
+        } else if (checkInEvent == null && events.isEmpty()) {
+            // No events at all - add missing check-in
+            AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
+            missingCheckIn.setEventId(null);
+            missingCheckIn.setType("MISSING_CHECK_IN");
+            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
+            missingCheckIn.setAttemptStatus("MISSING");
+            missingCheckIn.setLocationLabel("No check-in recorded");
+            missingCheckIn.setLat(null);
+            missingCheckIn.setLon(null);
+            missingCheckIn.setWithinFence(null);
+            missingCheckIn.setIntegrityVerdict(null);
+            missingCheckIn.setFailReason("User did not check in");
+            timeline.add(missingCheckIn);
         }
 
         // Add missing check-out event if needed
         if (checkInEvent != null && checkOutEvent == null) {
-            // Check if auto check-out should have happened but didn't
+            // Check-in exists but no check-out
             AttendanceDataResponse.PunchEvent missingCheckOut = new AttendanceDataResponse.PunchEvent();
             missingCheckOut.setEventId(null);
             missingCheckOut.setType("MISSING_CHECK_OUT");
-            missingCheckOut.setTime(null);
+            missingCheckOut.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
             missingCheckOut.setAttemptStatus("MISSING");
             missingCheckOut.setLocationLabel("No check-out recorded");
             missingCheckOut.setLat(null);
