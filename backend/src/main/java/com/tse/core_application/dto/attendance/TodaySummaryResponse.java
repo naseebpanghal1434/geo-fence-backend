@@ -9,7 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Phase 6b: Response for GET /api/orgs/{orgId}/attendance/today
+ * Response for POST /api/orgs/{orgId}/attendance/today
+ * Single-user attendance details similar to /data API structure.
  */
 @Getter
 @Setter
@@ -20,45 +21,111 @@ public class TodaySummaryResponse {
     @JsonProperty("accountId")
     private Long accountId;
 
-    @JsonProperty("dateKey")
-    private String dateKey; // YYYY-MM-DD
+    @JsonProperty("displayName")
+    private String displayName;
 
-    @JsonProperty("currentStatus")
-    private String currentStatus; // "CHECKED_OUT", "CHECKED_IN", "ON_BREAK", "NOT_STARTED"
+    @JsonProperty("date")
+    private String date; // yyyy-MM-dd
 
-    @JsonProperty("firstInUtc")
-    private String firstInUtc; // ISO-8601 timestamp
+    @JsonProperty("isWeekend")
+    private Boolean isWeekend;
 
-    @JsonProperty("lastOutUtc")
-    private String lastOutUtc; // ISO-8601 timestamp
+    @JsonProperty("isHoliday")
+    private Boolean isHoliday;
 
-    @JsonProperty("workedSeconds")
-    private Integer workedSeconds;
+    @JsonProperty("holidayName")
+    private String holidayName;
 
-    @JsonProperty("breakSeconds")
-    private Integer breakSeconds;
+    @JsonProperty("isOnLeave")
+    private Boolean isOnLeave;
 
-    @JsonProperty("events")
-    private List<EventSummary> events;
+    @JsonProperty("leaveName")
+    private String leaveName;
 
+    @JsonProperty("status")
+    private String status; // PRESENT, LATE, PARTIAL, ABSENT, PENDING, NOT_MARKED, HOLIDAY, LEAVE
+
+    @JsonProperty("checkInTime")
+    private String checkInTime; // HH:mm:ss in user timezone
+
+    @JsonProperty("checkOutTime")
+    private String checkOutTime; // HH:mm:ss in user timezone
+
+    @JsonProperty("totalHoursMinutes")
+    private Integer totalHoursMinutes;
+
+    @JsonProperty("totalEffortMinutes")
+    private Integer totalEffortMinutes;
+
+    @JsonProperty("totalBreakMinutes")
+    private Integer totalBreakMinutes;
+
+    @JsonProperty("breaks")
+    private List<BreakInterval> breaks;
+
+    @JsonProperty("primaryFenceName")
+    private String primaryFenceName;
+
+    @JsonProperty("flags")
+    private List<String> flags; // e.g., "Late check-in", "Weekend work", "Outside fence"
+
+    @JsonProperty("timeline")
+    private List<PunchEvent> timeline; // All punch events including missing events
+
+    /**
+     * Break interval.
+     */
     @Getter
     @Setter
     @AllArgsConstructor
     @NoArgsConstructor
-    public static class EventSummary {
+    public static class BreakInterval {
+        @JsonProperty("startTime")
+        private String startTime; // HH:mm:ss
+
+        @JsonProperty("endTime")
+        private String endTime;   // HH:mm:ss, null if break not ended
+
+        @JsonProperty("durationMinutes")
+        private Integer durationMinutes;
+    }
+
+    /**
+     * Punch event in timeline.
+     */
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class PunchEvent {
         @JsonProperty("eventId")
         private Long eventId;
 
-        @JsonProperty("eventKind")
-        private String eventKind;
+        @JsonProperty("type")
+        private String type; // CHECK_IN, CHECK_OUT, BREAK_START, BREAK_END, PUNCHED, MISSING_CHECK_IN, MISSING_CHECK_OUT
 
-        @JsonProperty("tsUtc")
-        private String tsUtc;
+        @JsonProperty("dateTime")
+        private String dateTime; // yyyy-MM-dd HH:mm:ss in user timezone
 
-        @JsonProperty("success")
-        private Boolean success;
+        @JsonProperty("attemptStatus")
+        private String attemptStatus; // SUCCESSFUL, UNSUCCESSFUL, IGNORED, MISSING
 
-        @JsonProperty("verdict")
-        private String verdict;
+        @JsonProperty("locationLabel")
+        private String locationLabel; // fence/site or "X km away"
+
+        @JsonProperty("lat")
+        private Double lat;
+
+        @JsonProperty("lon")
+        private Double lon;
+
+        @JsonProperty("withinFence")
+        private Boolean withinFence;
+
+        @JsonProperty("integrityVerdict")
+        private String integrityVerdict; // PASS, WARN, FAIL
+
+        @JsonProperty("failReason")
+        private String failReason;
     }
 }

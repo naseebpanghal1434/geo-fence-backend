@@ -5,6 +5,7 @@ import com.tse.core_application.dto.attendance.AttendanceDataResponse;
 import com.tse.core_application.dto.attendance.PunchCreateRequest;
 import com.tse.core_application.dto.attendance.PunchedEventRequest;
 import com.tse.core_application.dto.attendance.PunchResponse;
+import com.tse.core_application.dto.attendance.TodayAttendanceRequest;
 import com.tse.core_application.dto.attendance.TodaySummaryResponse;
 import com.tse.core_application.service.attendance.AttendanceDataService;
 import com.tse.core_application.service.attendance.AttendanceService;
@@ -152,16 +153,18 @@ public class AttendanceController {
     }
 
     /**
-     * GET /api/orgs/{orgId}/attendance/today
-     * Get today's summary for an account.
+     * POST /api/orgs/{orgId}/attendance/today
+     * Get attendance summary for a specific user and date.
+     * Similar to /data API but for single user.
      */
-    @GetMapping("/today")
-    @Operation(summary = "Get today's attendance summary", description = "Get attendance summary for today including events and rollup")
+    @PostMapping("/today")
+    @Operation(summary = "Get attendance summary for specific date",
+               description = "Get attendance summary for a specific user and date with all events, missing events, and timezone handling")
     public ResponseEntity<Object> getTodaySummary(
             @Parameter(description = "Organization ID", required = true)
             @PathVariable("orgId") Long orgId,
-            @Parameter(description = "Account ID", required = true)
-            @RequestParam("accountId") Long accountId,
+            @Parameter(description = "Today attendance request", required = true)
+            @Valid @RequestBody TodayAttendanceRequest request,
             @RequestHeader(name = "screenName") String screenName,
             @RequestHeader(name = "timeZone") String timeZone,
             @RequestHeader(name = "accountIds") String accountIds,
@@ -180,7 +183,7 @@ public class AttendanceController {
             // Validate geo-fencing access for the organization
             geoFencingAccessService.validateGeoFencingAccess(orgId);
 
-            TodaySummaryResponse response = attendanceService.getTodaySummary(orgId, accountId, timeZone);
+            TodaySummaryResponse response = attendanceService.getTodaySummary(orgId, request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getTodaySummary" + '"' + " method because completed successfully ...");
