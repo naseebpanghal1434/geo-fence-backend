@@ -65,6 +65,7 @@ public class AttendanceDataResponse {
     @AllArgsConstructor
     public static class DailyAttendanceData {
         private String date; // yyyy-MM-dd
+        private Boolean isWeekend; // Indicates if this date is weekend for the org
         private DateSummary dateSummary;
         private List<UserAttendanceData> userAttendance; // Sorted by accountId ascending
     }
