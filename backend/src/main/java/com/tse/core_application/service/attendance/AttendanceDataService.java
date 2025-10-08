@@ -131,6 +131,51 @@ public class AttendanceDataService {
     }
 
     /**
+     * Get attendance data for a single user and single date.
+     * Used by /today API endpoint. Reuses all the logic from /data API.
+     *
+     * @param orgId Organization ID
+     * @param accountId Account ID
+     * @param date Date in yyyy-MM-dd format
+     * @param userTimeZone User's timezone
+     * @return Single user's attendance data for the specified date
+     */
+    @Transactional(readOnly = true)
+    public AttendanceDataResponse.UserAttendanceData getSingleUserAttendanceData(
+            Long orgId, Long accountId, String date, String userTimeZone) {
+
+        // Parse date
+        LocalDate targetDate = parseDate(date);
+
+        // Load policy
+        AttendancePolicy policy = policyRepository.findByOrgId(orgId)
+                .orElseThrow(() -> new ProblemException(
+                        HttpStatus.NOT_FOUND,
+                        "POLICY_NOT_FOUND",
+                        "Attendance policy not found",
+                        "No attendance policy found for org: " + orgId
+                ));
+
+        // Load events for this user and date (timezone-aware)
+        Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap = loadEvents(
+                orgId, Collections.singletonList(accountId), targetDate, targetDate, userTimeZone);
+
+        // Load attendance day for this user and date
+        Map<Long, Map<LocalDate, AttendanceDay>> daysMap = loadAttendanceDays(
+                orgId, Collections.singletonList(accountId), targetDate, targetDate);
+
+        // Load fences for location labels
+        Map<Long, GeoFence> fenceMap = loadFences(orgId);
+
+        // Get user name
+        Map<Long, String> userNamesMap = getUserNamesMap(Collections.singletonList(accountId));
+
+        // Build user attendance data using existing logic
+        return buildUserAttendanceData(
+                orgId, accountId, targetDate, eventsMap, daysMap, fenceMap, policy, userNamesMap, userTimeZone);
+    }
+
+    /**
      * Bulk user name resolver to avoid N queries.
      * Returns map of accountId -> displayName.
      */

@@ -7,6 +7,7 @@ import com.tse.core_application.constants.attendance.EventSource;
 import com.tse.core_application.constants.attendance.IntegrityVerdict;
 import com.tse.core_application.dto.attendance.PunchCreateRequest;
 import com.tse.core_application.dto.attendance.PunchResponse;
+import com.tse.core_application.dto.attendance.TodayAttendanceRequest;
 import com.tse.core_application.dto.attendance.TodaySummaryResponse;
 import com.tse.core_application.entity.assignment.FenceAssignment;
 import com.tse.core_application.entity.attendance.AttendanceDay;
@@ -54,6 +55,7 @@ public class AttendanceService {
     private final AcceptanceRules acceptanceRules;
     private final DayRollupService dayRollupService;
     private final OfficePolicyProvider officePolicyProvider;
+    private final AttendanceDataService attendanceDataService;
 
     public AttendanceService(
             AttendanceEventRepository eventRepository,
@@ -66,7 +68,8 @@ public class AttendanceService {
             PolicyGate policyGate,
             AcceptanceRules acceptanceRules,
             DayRollupService dayRollupService,
-            OfficePolicyProvider officePolicyProvider) {
+            OfficePolicyProvider officePolicyProvider,
+            AttendanceDataService attendanceDataService) {
         this.eventRepository = eventRepository;
         this.dayRepository = dayRepository;
         this.policyRepository = policyRepository;
@@ -78,6 +81,7 @@ public class AttendanceService {
         this.acceptanceRules = acceptanceRules;
         this.dayRollupService = dayRollupService;
         this.officePolicyProvider = officePolicyProvider;
+        this.attendanceDataService = attendanceDataService;
     }
 
     /**
@@ -318,53 +322,86 @@ public class AttendanceService {
     }
 
     /**
-     * Get today's summary for an account.
+     * Get attendance summary for a specific user and date.
+     * Reuses all logic from /data API for consistency.
+     *
+     * @param orgId Organization ID
+     * @param request Request with accountId and date
+     * @param timeZone User's timezone
+     * @return Attendance summary with all events, missing events, and proper status
      */
     @Transactional(readOnly = true)
-    public TodaySummaryResponse getTodaySummary(long orgId, long accountId, String timeZone) {
-        LocalDate dateKey = dayRollupService.getDateKey(orgId, LocalDateTime.now());
-        String tz = officePolicyProvider.getOperationalTimezone(orgId);
+    public TodaySummaryResponse getTodaySummary(long orgId, TodayAttendanceRequest request, String timeZone) {
+        // Use AttendanceDataService to get single user data with all the /data API logic
+        com.tse.core_application.dto.attendance.AttendanceDataResponse.UserAttendanceData userData =
+                attendanceDataService.getSingleUserAttendanceData(orgId, request.getAccountId(), request.getDate(), timeZone);
 
-        LocalDateTime dayStart = dateKey.atStartOfDay();
-        LocalDateTime dayEnd = dateKey.plusDays(1).atStartOfDay();
+        // Parse date to get holiday info
+        LocalDate targetDate = LocalDate.parse(request.getDate(), DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        LocalDate todayInUserTZ = LocalDate.now(ZoneId.of(timeZone));
 
-        List<AttendanceEvent> todayEvents = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
-                orgId, accountId, dayStart, dayEnd
-        );
+        // Get holiday/leave information
+        boolean isWeekend = isWeekendDay(targetDate);
+        boolean isHoliday = false; // TODO: Implement holiday check
+        String holidayName = null;
+        boolean isOnLeave = false; // TODO: Implement leave check
+        String leaveName = null;
 
-        Optional<AttendanceDay> dayOpt = dayRepository.findByOrgIdAndAccountIdAndDateKey(orgId, accountId, dateKey);
-
+        // Build response
         TodaySummaryResponse response = new TodaySummaryResponse();
-        response.setAccountId(accountId);
-        response.setDateKey(dateKey.toString());
+        response.setAccountId(request.getAccountId());
+        response.setDisplayName(userData.getDisplayName());
+        response.setDate(request.getDate());
+        response.setIsWeekend(isWeekend);
+        response.setIsHoliday(isHoliday);
+        response.setHolidayName(holidayName);
+        response.setIsOnLeave(isOnLeave);
+        response.setLeaveName(leaveName);
+        response.setStatus(userData.getStatus());
+        response.setCheckInTime(userData.getCheckInTime());
+        response.setCheckOutTime(userData.getCheckOutTime());
+        response.setTotalHoursMinutes(userData.getTotalHoursMinutes());
+        response.setTotalEffortMinutes(userData.getTotalEffortMinutes());
+        response.setTotalBreakMinutes(userData.getTotalBreakMinutes());
+        response.setPrimaryFenceName(userData.getPrimaryFenceName());
+        response.setFlags(userData.getFlags());
 
-        if (dayOpt.isPresent()) {
-            AttendanceDay day = dayOpt.get();
-            // Convert timestamps from server timezone to user timezone
-            response.setFirstInUtc(day.getFirstInUtc() != null
-                ? DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(day.getFirstInUtc(), timeZone).toString()
-                : null);
-            response.setLastOutUtc(day.getLastOutUtc() != null
-                ? DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(day.getLastOutUtc(), timeZone).toString()
-                : null);
-            response.setWorkedSeconds(day.getWorkedSeconds());
-            response.setBreakSeconds(day.getBreakSeconds());
-        } else {
-            response.setWorkedSeconds(0);
-            response.setBreakSeconds(0);
-        }
+        // Convert breaks
+        List<TodaySummaryResponse.BreakInterval> breaks = userData.getBreaks() == null ? null :
+                userData.getBreaks().stream()
+                        .map(b -> new TodaySummaryResponse.BreakInterval(
+                                b.getStartTime(),
+                                b.getEndTime(),
+                                b.getDurationMinutes()))
+                        .collect(Collectors.toList());
+        response.setBreaks(breaks);
 
-        // Determine current status
-        String currentStatus = determineCurrentStatus(todayEvents);
-        response.setCurrentStatus(currentStatus);
-
-        // Map events
-        List<TodaySummaryResponse.EventSummary> eventSummaries = todayEvents.stream()
-                .map(event -> mapToEventSummary(event, timeZone))
-                .collect(Collectors.toList());
-        response.setEvents(eventSummaries);
+        // Convert timeline
+        List<TodaySummaryResponse.PunchEvent> timeline = userData.getTimeline() == null ? null :
+                userData.getTimeline().stream()
+                        .map(e -> new TodaySummaryResponse.PunchEvent(
+                                e.getEventId(),
+                                e.getType(),
+                                e.getDateTime(),
+                                e.getAttemptStatus(),
+                                e.getLocationLabel(),
+                                e.getLat(),
+                                e.getLon(),
+                                e.getWithinFence(),
+                                e.getIntegrityVerdict(),
+                                e.getFailReason()))
+                        .collect(Collectors.toList());
+        response.setTimeline(timeline);
 
         return response;
+    }
+
+    /**
+     * Check if a date is weekend (Saturday or Sunday).
+     */
+    private boolean isWeekendDay(LocalDate date) {
+        java.time.DayOfWeek dayOfWeek = date.getDayOfWeek();
+        return dayOfWeek == java.time.DayOfWeek.SATURDAY || dayOfWeek == java.time.DayOfWeek.SUNDAY;
     }
 
     private void validatePunchRequest(PunchCreateRequest request) {
@@ -525,32 +562,6 @@ public class AttendanceService {
         return 99;
     }
 
-    private String determineCurrentStatus(List<AttendanceEvent> events) {
-        if (events == null || events.isEmpty()) {
-            return "NOT_STARTED";
-        }
-
-        // Walk backwards to find the last successful event
-        for (int i = events.size() - 1; i >= 0; i--) {
-            AttendanceEvent event = events.get(i);
-            if (!event.getSuccess()) {
-                continue;
-            }
-
-            if (event.getEventKind() == EventKind.CHECK_IN) {
-                return "CHECKED_IN";
-            } else if (event.getEventKind() == EventKind.CHECK_OUT) {
-                return "CHECKED_OUT";
-            } else if (event.getEventKind() == EventKind.BREAK_START) {
-                return "ON_BREAK";
-            } else if (event.getEventKind() == EventKind.BREAK_END) {
-                return "CHECKED_IN";
-            }
-        }
-
-        return "NOT_STARTED";
-    }
-
     private PunchResponse mapToResponse(AttendanceEvent event, String timeZone) {
         PunchResponse response = new PunchResponse();
         response.setEventId(event.getId());
@@ -566,17 +577,6 @@ public class AttendanceService {
         response.setFailReason(event.getFailReason());
         response.setFlags(event.getFlags());
         return response;
-    }
-
-    private TodaySummaryResponse.EventSummary mapToEventSummary(AttendanceEvent event, String timeZone) {
-        TodaySummaryResponse.EventSummary summary = new TodaySummaryResponse.EventSummary();
-        summary.setEventId(event.getId());
-        summary.setEventKind(event.getEventKind().name());
-        // Convert timestamp from server timezone to user timezone
-        summary.setTsUtc(DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(event.getTsUtc(), timeZone).toString());
-        summary.setSuccess(event.getSuccess());
-        summary.setVerdict(event.getVerdict().name());
-        return summary;
     }
 
     private static class EntityRef {
