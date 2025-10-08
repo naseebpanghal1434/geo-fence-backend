@@ -411,6 +411,7 @@ public class AttendanceDataService {
 
     /**
      * Build complete attendance data for a single user on a specific date.
+     * Shows actual work data even if day is weekend/holiday/leave.
      */
     private AttendanceDataResponse.UserAttendanceData buildUserAttendanceData(
             Long orgId, Long accountId, LocalDate date,
@@ -421,50 +422,63 @@ public class AttendanceDataService {
             Map<Long, String> userNamesMap,
             String userTimeZone) {
 
-        HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
-
-        // Skip weekends - return null
-        if (holidayInfo.isWeekend()) {
-            return null;
-        }
-
+        // STEP 1: Load events FIRST (before checking special day status)
         List<AttendanceEvent> events = eventsMap.getOrDefault(accountId, Collections.emptyMap())
                 .getOrDefault(date, Collections.emptyList());
         AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
 
+        // STEP 2: Get special day information
+        HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
+        boolean hasEvents = !events.isEmpty();
+
+        // STEP 3: If NO events on special day → return with special status
+        if (!hasEvents) {
+            AttendanceDataResponse.UserAttendanceData userData = new AttendanceDataResponse.UserAttendanceData();
+            userData.setAccountId(accountId);
+            userData.setDisplayName(userNamesMap.getOrDefault(accountId, "User " + accountId));
+
+            // Skip weekends with no activity (don't show in list)
+            if (holidayInfo.isWeekend()) {
+                return null;
+            }
+
+            // Public holiday with no work
+            if (holidayInfo.isPublicHoliday()) {
+                userData.setStatus("HOLIDAY");
+                userData.setCheckInTime(null);
+                userData.setCheckOutTime(null);
+                userData.setTotalHoursMinutes(0);
+                userData.setTotalEffortMinutes(0);
+                userData.setTotalBreakMinutes(0);
+                userData.setBreaks(Collections.emptyList());
+                userData.setPrimaryFenceName(null);
+                userData.setFlags(Collections.emptyList());
+                userData.setTimeline(Collections.emptyList());
+                return userData;
+            }
+
+            // On leave with no work
+            if (holidayInfo.isOnLeave()) {
+                userData.setStatus("LEAVE");
+                userData.setCheckInTime(null);
+                userData.setCheckOutTime(null);
+                userData.setTotalHoursMinutes(0);
+                userData.setTotalEffortMinutes(0);
+                userData.setTotalBreakMinutes(0);
+                userData.setBreaks(Collections.emptyList());
+                userData.setPrimaryFenceName(null);
+                String leaveLabel = "On Leave: " + (holidayInfo.getLeaveName() != null ? holidayInfo.getLeaveName() : "Approved");
+                userData.setFlags(Collections.singletonList(leaveLabel));
+                userData.setTimeline(Collections.emptyList());
+                return userData;
+            }
+        }
+
+        // STEP 4: If HAS events → Process normally (regardless of special day)
+        // This handles cases where user worked on weekend/holiday/leave
         AttendanceDataResponse.UserAttendanceData userData = new AttendanceDataResponse.UserAttendanceData();
         userData.setAccountId(accountId);
         userData.setDisplayName(userNamesMap.getOrDefault(accountId, "User " + accountId));
-
-        // Handle holiday status
-        if (holidayInfo.isPublicHoliday()) {
-            userData.setStatus("HOLIDAY");
-            userData.setCheckInTime(null);
-            userData.setCheckOutTime(null);
-            userData.setTotalHoursMinutes(0);
-            userData.setTotalEffortMinutes(0);
-            userData.setTotalBreakMinutes(0);
-            userData.setBreaks(Collections.emptyList());
-            userData.setPrimaryFenceName(null);
-            userData.setFlags(Collections.emptyList());
-            userData.setTimeline(Collections.emptyList());
-            return userData;
-        }
-
-        // Handle leave status
-        if (holidayInfo.isOnLeave()) {
-            userData.setStatus("LEAVE");
-            userData.setCheckInTime(null);
-            userData.setCheckOutTime(null);
-            userData.setTotalHoursMinutes(0);
-            userData.setTotalEffortMinutes(0);
-            userData.setTotalBreakMinutes(0);
-            userData.setBreaks(Collections.emptyList());
-            userData.setPrimaryFenceName(null);
-            userData.setFlags(Collections.singletonList("Leave: " + (holidayInfo.getLeaveName() != null ? holidayInfo.getLeaveName() : "Approved")));
-            userData.setTimeline(Collections.emptyList());
-            return userData;
-        }
 
         // Find check-in and check-out events
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
@@ -502,8 +516,8 @@ public class AttendanceDataService {
         String status = determineStatus(date, events, day, policy);
         userData.setStatus(status);
 
-        // Flags
-        List<String> flags = extractFlags(events, checkInEvent, checkOutEvent, policy);
+        // Flags (with contextual information for special days)
+        List<String> flags = extractFlags(events, checkInEvent, checkOutEvent, policy, holidayInfo);
         userData.setFlags(flags);
 
         // Timeline (all punches with date+time, sorted chronologically)
@@ -692,9 +706,48 @@ public class AttendanceDataService {
         return checkInTime.isAfter(lateThreshold);
     }
 
-    private List<String> extractFlags(List<AttendanceEvent> events, AttendanceEvent checkInEvent, AttendanceEvent checkOutEvent, AttendancePolicy policy) {
+    /**
+     * Extract flags for attendance including contextual (special day) and warning flags.
+     * Contextual flags appear first, followed by warning flags.
+     */
+    private List<String> extractFlags(
+            List<AttendanceEvent> events,
+            AttendanceEvent checkInEvent,
+            AttendanceEvent checkOutEvent,
+            AttendancePolicy policy,
+            HolidayInfo holidayInfo) {
+
         List<String> flags = new ArrayList<>();
 
+        // CONTEXTUAL FLAGS FIRST (informational about special circumstances)
+        if (!events.isEmpty()) {
+            // Weekend work
+            if (holidayInfo.isWeekend()) {
+                flags.add("Weekend work");
+            }
+
+            // Public holiday work
+            if (holidayInfo.isPublicHoliday()) {
+                String holidayName = holidayInfo.getHolidayName();
+                if (holidayName != null && !holidayName.isEmpty()) {
+                    flags.add("Worked on Holiday: " + holidayName);
+                } else {
+                    flags.add("Worked on Holiday");
+                }
+            }
+
+            // On leave but attended
+            if (holidayInfo.isOnLeave()) {
+                String leaveName = holidayInfo.getLeaveName();
+                if (leaveName != null && !leaveName.isEmpty()) {
+                    flags.add("On Leave: " + leaveName);
+                } else {
+                    flags.add("On Leave: Approved");
+                }
+            }
+        }
+
+        // WARNING FLAGS (policy violations and issues)
         if (checkInEvent != null) {
             if (isLateCheckIn(checkInEvent, policy)) {
                 flags.add("Late check-in");
@@ -769,6 +822,7 @@ public class AttendanceDataService {
         private boolean isPublicHoliday = false;
         private boolean isOnLeave = false;
         private String leaveName = null;
+        private String holidayName = null;
 
         public boolean isWeekend() {
             return isWeekend;
@@ -800,6 +854,14 @@ public class AttendanceDataService {
 
         public void setLeaveName(String leaveName) {
             this.leaveName = leaveName;
+        }
+
+        public String getHolidayName() {
+            return holidayName;
+        }
+
+        public void setHolidayName(String holidayName) {
+            this.holidayName = holidayName;
         }
     }
 }
