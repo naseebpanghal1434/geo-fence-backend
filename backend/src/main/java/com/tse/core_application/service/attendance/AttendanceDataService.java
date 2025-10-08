@@ -117,7 +117,7 @@ public class AttendanceDataService {
         AttendanceDataResponse response = new AttendanceDataResponse();
 
         // A) Build summary section
-        response.setSummary(buildSummarySection(request, fromDate, toDate, eventsMap, daysMap, policy));
+        response.setSummary(buildSummarySection(request, fromDate, toDate, eventsMap, daysMap, policy, userTimeZone));
 
         // B) Build unified attendance data (sorted by date, then by accountId)
         response.setAttendanceData(buildAttendanceData(
@@ -249,7 +249,8 @@ public class AttendanceDataService {
             AttendanceDataRequest request, LocalDate fromDate, LocalDate toDate,
             Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            AttendancePolicy policy) {
+            AttendancePolicy policy,
+            String userTimeZone) {
 
         Map<String, AttendanceDataResponse.DateSummary> perDateSummary = new HashMap<>();
         AttendanceDataResponse.DateSummary overallSummary = new AttendanceDataResponse.DateSummary();
@@ -260,7 +261,7 @@ public class AttendanceDataService {
         LocalDate currentDate = fromDate;
         while (!currentDate.isAfter(toDate)) {
             AttendanceDataResponse.DateSummary dateSummary = computeDateSummary(
-                    request, currentDate, eventsMap, daysMap, policy);
+                    request, currentDate, eventsMap, daysMap, policy, userTimeZone);
             perDateSummary.put(currentDate.format(DATE_FORMATTER), dateSummary);
 
             overallPresent += dateSummary.getPresent();
@@ -294,7 +295,8 @@ public class AttendanceDataService {
             AttendanceDataRequest request, LocalDate date,
             Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap,
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
-            AttendancePolicy policy) {
+            AttendancePolicy policy,
+            String userTimeZone) {
 
         int present = 0, absent = 0, onLeave = 0, onHoliday = 0, partial = 0, late = 0, alerts = 0;
 
@@ -320,7 +322,7 @@ public class AttendanceDataService {
                     .getOrDefault(date, Collections.emptyList());
             AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
 
-            String status = determineStatus(date, events, day, policy);
+            String status = determineStatus(date, events, day, policy, userTimeZone);
 
             switch (status) {
                 case "PRESENT":
@@ -379,7 +381,7 @@ public class AttendanceDataService {
 
             // Compute date summary
             AttendanceDataResponse.DateSummary dateSummary = computeDateSummary(
-                    request, currentDate, eventsMap, daysMap, policy);
+                    request, currentDate, eventsMap, daysMap, policy, userTimeZone);
             dailyData.setDateSummary(dateSummary);
 
             // Build user attendance list (sorted by accountId)
@@ -484,11 +486,25 @@ public class AttendanceDataService {
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
         AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
 
-        userData.setCheckInTime(checkInEvent != null ? checkInEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
-        userData.setCheckOutTime(checkOutEvent != null ? checkOutEvent.getTsUtc().toLocalTime().format(TIME_FORMATTER) : null);
+        // Convert check-in and check-out times to user timezone
+        if (checkInEvent != null) {
+            LocalDateTime userCheckInDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                    checkInEvent.getTsUtc(), userTimeZone);
+            userData.setCheckInTime(userCheckInDateTime.toLocalTime().format(TIME_FORMATTER));
+        } else {
+            userData.setCheckInTime(null);
+        }
 
-        // Breaks
-        List<AttendanceDataResponse.BreakInterval> breaks = extractBreaks(events);
+        if (checkOutEvent != null) {
+            LocalDateTime userCheckOutDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                    checkOutEvent.getTsUtc(), userTimeZone);
+            userData.setCheckOutTime(userCheckOutDateTime.toLocalTime().format(TIME_FORMATTER));
+        } else {
+            userData.setCheckOutTime(null);
+        }
+
+        // Breaks (convert to user timezone)
+        List<AttendanceDataResponse.BreakInterval> breaks = extractBreaks(events, userTimeZone);
         int totalBreakMinutes = breaks.stream()
                 .mapToInt(AttendanceDataResponse.BreakInterval::getDurationMinutes)
                 .sum();
@@ -513,11 +529,11 @@ public class AttendanceDataService {
         }
 
         // Status
-        String status = determineStatus(date, events, day, policy);
+        String status = determineStatus(date, events, day, policy, userTimeZone);
         userData.setStatus(status);
 
         // Flags (with contextual information for special days)
-        List<String> flags = extractFlags(events, checkInEvent, checkOutEvent, policy, holidayInfo);
+        List<String> flags = extractFlags(events, checkInEvent, checkOutEvent, policy, holidayInfo, userTimeZone);
         userData.setFlags(flags);
 
         // Timeline (all punches with date+time, sorted chronologically)
@@ -634,7 +650,7 @@ public class AttendanceDataService {
                 .orElse(null);
     }
 
-    private List<AttendanceDataResponse.BreakInterval> extractBreaks(List<AttendanceEvent> events) {
+    private List<AttendanceDataResponse.BreakInterval> extractBreaks(List<AttendanceEvent> events, String userTimeZone) {
         List<AttendanceDataResponse.BreakInterval> breaks = new ArrayList<>();
 
         AttendanceEvent breakStart = null;
@@ -643,8 +659,15 @@ public class AttendanceDataService {
                 breakStart = event;
             } else if (event.getEventKind() == EventKind.BREAK_END && event.getSuccess() && breakStart != null) {
                 AttendanceDataResponse.BreakInterval breakInterval = new AttendanceDataResponse.BreakInterval();
-                breakInterval.setStartTime(breakStart.getTsUtc().toLocalTime().format(TIME_FORMATTER));
-                breakInterval.setEndTime(event.getTsUtc().toLocalTime().format(TIME_FORMATTER));
+
+                // Convert break times to user timezone
+                LocalDateTime userBreakStartDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                        breakStart.getTsUtc(), userTimeZone);
+                breakInterval.setStartTime(userBreakStartDateTime.toLocalTime().format(TIME_FORMATTER));
+
+                LocalDateTime userBreakEndDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                        event.getTsUtc(), userTimeZone);
+                breakInterval.setEndTime(userBreakEndDateTime.toLocalTime().format(TIME_FORMATTER));
 
                 long durationMinutes = ChronoUnit.MINUTES.between(breakStart.getTsUtc(), event.getTsUtc());
                 breakInterval.setDurationMinutes((int) durationMinutes);
@@ -657,7 +680,9 @@ public class AttendanceDataService {
         // If break start exists but no end, add incomplete break
         if (breakStart != null) {
             AttendanceDataResponse.BreakInterval breakInterval = new AttendanceDataResponse.BreakInterval();
-            breakInterval.setStartTime(breakStart.getTsUtc().toLocalTime().format(TIME_FORMATTER));
+            LocalDateTime userBreakStartDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                    breakStart.getTsUtc(), userTimeZone);
+            breakInterval.setStartTime(userBreakStartDateTime.toLocalTime().format(TIME_FORMATTER));
             breakInterval.setEndTime(null);
             breakInterval.setDurationMinutes(0);
             breaks.add(breakInterval);
@@ -666,7 +691,7 @@ public class AttendanceDataService {
         return breaks;
     }
 
-    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy) {
+    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy, String userTimeZone) {
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
         AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
 
@@ -676,7 +701,7 @@ public class AttendanceDataService {
         }
 
         // Late if check-in is late
-        if (isLateCheckIn(checkInEvent, policy)) {
+        if (isLateCheckIn(checkInEvent, policy, userTimeZone)) {
             return "LATE";
         }
 
@@ -696,11 +721,15 @@ public class AttendanceDataService {
         return "PRESENT";
     }
 
-    private boolean isLateCheckIn(AttendanceEvent checkInEvent, AttendancePolicy policy) {
-        // TODO: Implement proper late check-in logic based on office start time
-        // For now, assume office starts at 9:00 AM
+    private boolean isLateCheckIn(AttendanceEvent checkInEvent, AttendancePolicy policy, String userTimeZone) {
+        // Office start time is in user timezone (e.g., 9:00 AM in Asia/Kolkata)
         LocalTime officeStartTime = LocalTime.of(9, 0);
-        LocalTime checkInTime = checkInEvent.getTsUtc().toLocalTime();
+
+        // Convert check-in timestamp from server timezone to user timezone
+        LocalDateTime userCheckInDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                checkInEvent.getTsUtc(), userTimeZone);
+        LocalTime checkInTime = userCheckInDateTime.toLocalTime();
+
         LocalTime lateThreshold = officeStartTime.plusMinutes(policy.getLateCheckinAfterStartMin());
 
         return checkInTime.isAfter(lateThreshold);
@@ -715,7 +744,8 @@ public class AttendanceDataService {
             AttendanceEvent checkInEvent,
             AttendanceEvent checkOutEvent,
             AttendancePolicy policy,
-            HolidayInfo holidayInfo) {
+            HolidayInfo holidayInfo,
+            String userTimeZone) {
 
         List<String> flags = new ArrayList<>();
 
@@ -749,7 +779,7 @@ public class AttendanceDataService {
 
         // WARNING FLAGS (policy violations and issues)
         if (checkInEvent != null) {
-            if (isLateCheckIn(checkInEvent, policy)) {
+            if (isLateCheckIn(checkInEvent, policy, userTimeZone)) {
                 flags.add("Late check-in");
             }
             if (!checkInEvent.getUnderRange()) {

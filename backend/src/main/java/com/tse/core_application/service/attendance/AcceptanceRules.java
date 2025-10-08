@@ -121,8 +121,9 @@ public class AcceptanceRules {
 
         // 6. Check office hours (for CHECK_IN)
         if (eventKind == EventKind.CHECK_IN) {
-            LocalDateTime now = LocalDateTime.now();
+            // Get current time in organization's timezone (not server timezone)
             String tz = officePolicyProvider.getOperationalTimezone(orgId);
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(tz));
             LocalTime currentTime = now.toLocalTime();
             LocalTime officeStart = officePolicyProvider.getOfficeStartTime(orgId);
             LocalTime officeEnd = officePolicyProvider.getOfficeEndTime(orgId);
@@ -140,8 +141,9 @@ public class AcceptanceRules {
 
         // 7. Check office hours (for CHECK_OUT)
         if (eventKind == EventKind.CHECK_OUT) {
-            LocalDateTime now = LocalDateTime.now();
+            // Get current time in organization's timezone (not server timezone)
             String tz = officePolicyProvider.getOperationalTimezone(orgId);
+            LocalDateTime now = LocalDateTime.now(ZoneId.of(tz));
             LocalTime currentTime = now.toLocalTime();
             LocalTime officeEnd = officePolicyProvider.getOfficeEndTime(orgId);
 
