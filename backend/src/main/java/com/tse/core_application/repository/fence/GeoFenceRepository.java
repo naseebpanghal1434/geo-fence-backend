@@ -17,4 +17,6 @@ public interface GeoFenceRepository extends JpaRepository<GeoFence, Long>, JpaSp
     List<GeoFence> findByOrgIdAndIdIn(Long orgId, Collection<Long> ids);
 
     List<GeoFence> findByOrgIdAndIdInAndIsActiveTrue(Long orgId, Collection<Long> ids);
+
+    List<GeoFence> findByOrgId(Long orgId);
 }
