@@ -231,7 +231,7 @@ public class AttendanceController {
             // Ensure orgId in request matches path variable
             request.setOrgId(orgId);
 
-            AttendanceDataResponse response = attendanceDataService.getAttendanceData(request);
+            AttendanceDataResponse response = attendanceDataService.getAttendanceData(request, timeZone);
             long estimatedTime = System.currentTimeMillis() - startTime;
             ThreadContext.put("systemResponseTime", String.valueOf(estimatedTime));
             logger.info("Exited" + '"' + " getAttendanceData" + '"' + " method because completed successfully ...");
