@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -325,7 +326,7 @@ public class AttendanceDataService {
                     .getOrDefault(date, Collections.emptyList());
             AttendanceDay day = daysMap.getOrDefault(accountId, Collections.emptyMap()).get(date);
 
-            String status = determineStatus(date, events, day, policy, userTimeZone);
+            String status = determineStatus(date, events, day, policy, userTimeZone, request.getOrgId());
 
             switch (status) {
                 case "PRESENT":
@@ -339,6 +340,12 @@ public class AttendanceDataService {
                     break;
                 case "ABSENT":
                     absent++;
+                    break;
+                case "PENDING":
+                    // Today before office hours - don't count in any category yet
+                    break;
+                case "NOT_MARKED":
+                    // Future date - don't count in any category
                     break;
             }
 
@@ -538,7 +545,7 @@ public class AttendanceDataService {
         }
 
         // Status
-        String status = determineStatus(date, events, day, policy, userTimeZone);
+        String status = determineStatus(date, events, day, policy, userTimeZone, orgId);
         userData.setStatus(status);
 
         // Flags (with contextual information for special days)
@@ -560,6 +567,16 @@ public class AttendanceDataService {
             String userTimeZone, Long orgId) {
 
         List<AttendanceDataResponse.PunchEvent> timeline = new ArrayList<>();
+
+        // Determine if this date is today, past, or future in user's timezone
+        LocalDate todayInUserTZ = LocalDate.now(ZoneId.of(userTimeZone));
+        boolean isToday = date.equals(todayInUserTZ);
+        boolean isFuture = date.isAfter(todayInUserTZ);
+
+        // Get office hours for today's logic
+        LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
+        LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+        LocalTime currentTimeInUserTZ = isToday ? LocalTime.now(ZoneId.of(userTimeZone)) : null;
 
         // Add actual events (sorted by timestamp)
         for (AttendanceEvent event : events) {
@@ -603,12 +620,18 @@ public class AttendanceDataService {
         }
 
         // Add missing check-in event if needed
-        if (checkInEvent == null && !events.isEmpty()) {
+        // Logic:
+        // - Future dates: Never show missing check-in
+        // - Today: Only show if current time has passed office start time
+        // - Past dates: Always show if missing
+        boolean shouldShowMissingCheckIn = checkInEvent == null &&
+                !isFuture && // Don't show for future dates
+                (!isToday || (currentTimeInUserTZ != null && currentTimeInUserTZ.isAfter(officeStartTime)));
+
+        if (shouldShowMissingCheckIn && !events.isEmpty()) {
             AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
             missingCheckIn.setEventId(null);
             missingCheckIn.setType("MISSING_CHECK_IN");
-            // Use office start time instead of "--:--:--"
-            LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
             missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " " + officeStartTime.format(TIME_FORMATTER));
             missingCheckIn.setAttemptStatus("MISSING");
             missingCheckIn.setLocationLabel("No check-in recorded");
@@ -618,13 +641,11 @@ public class AttendanceDataService {
             missingCheckIn.setIntegrityVerdict(null);
             missingCheckIn.setFailReason("User did not check in");
             timeline.add(0, missingCheckIn);
-        } else if (checkInEvent == null && events.isEmpty()) {
+        } else if (shouldShowMissingCheckIn && events.isEmpty()) {
             // No events at all - add missing check-in
             AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
             missingCheckIn.setEventId(null);
             missingCheckIn.setType("MISSING_CHECK_IN");
-            // Use office start time instead of "--:--:--"
-            LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
             missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " " + officeStartTime.format(TIME_FORMATTER));
             missingCheckIn.setAttemptStatus("MISSING");
             missingCheckIn.setLocationLabel("No check-in recorded");
@@ -637,13 +658,19 @@ public class AttendanceDataService {
         }
 
         // Add missing check-out event if needed
-        if (checkInEvent != null && checkOutEvent == null) {
+        // Logic:
+        // - Future dates: Never show missing check-out
+        // - Today: Only show if current time has passed office end time AND check-in exists
+        // - Past dates: Always show if missing (and check-in exists)
+        boolean shouldShowMissingCheckOut = checkInEvent != null && checkOutEvent == null &&
+                !isFuture && // Don't show for future dates
+                (!isToday || (currentTimeInUserTZ != null && currentTimeInUserTZ.isAfter(officeEndTime)));
+
+        if (shouldShowMissingCheckOut) {
             // Check-in exists but no check-out
             AttendanceDataResponse.PunchEvent missingCheckOut = new AttendanceDataResponse.PunchEvent();
             missingCheckOut.setEventId(null);
             missingCheckOut.setType("MISSING_CHECK_OUT");
-            // Use office end time instead of "--:--:--"
-            LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
             missingCheckOut.setDateTime(date.format(DATE_FORMATTER) + " " + officeEndTime.format(TIME_FORMATTER));
             missingCheckOut.setAttemptStatus("MISSING");
             missingCheckOut.setLocationLabel("No check-out recorded");
@@ -716,12 +743,34 @@ public class AttendanceDataService {
         return breaks;
     }
 
-    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy, String userTimeZone) {
+    private String determineStatus(LocalDate date, List<AttendanceEvent> events, AttendanceDay day, AttendancePolicy policy, String userTimeZone, Long orgId) {
         AttendanceEvent checkInEvent = findSuccessfulEvent(events, EventKind.CHECK_IN);
         AttendanceEvent checkOutEvent = findSuccessfulEvent(events, EventKind.CHECK_OUT);
 
+        // Determine if this date is today or future in user's timezone
+        LocalDate todayInUserTZ = LocalDate.now(ZoneId.of(userTimeZone));
+        boolean isToday = date.equals(todayInUserTZ);
+        boolean isFuture = date.isAfter(todayInUserTZ);
+
         // Absent if no check-in
         if (checkInEvent == null) {
+            // For future dates: Don't mark as absent (attendance can't be marked yet)
+            if (isFuture) {
+                return "NOT_MARKED"; // Future date - no attendance expected
+            }
+
+            // For today: Only mark as absent if office start time has passed
+            if (isToday) {
+                LocalTime currentTimeInUserTZ = LocalTime.now(ZoneId.of(userTimeZone));
+                LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
+
+                // If current time is before office start, don't mark as absent yet
+                if (currentTimeInUserTZ.isBefore(officeStartTime)) {
+                    return "PENDING"; // Before office hours - status pending
+                }
+            }
+
+            // For past dates or today after office start: Mark as absent
             return "ABSENT";
         }
 
@@ -732,6 +781,17 @@ public class AttendanceDataService {
 
         // Partial if no check-out or insufficient effort
         if (checkOutEvent == null) {
+            // For today: Only mark as partial if office end time has passed
+            if (isToday) {
+                LocalTime currentTimeInUserTZ = LocalTime.now(ZoneId.of(userTimeZone));
+                LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+
+                // If current time is before office end, status is still in progress
+                if (currentTimeInUserTZ.isBefore(officeEndTime)) {
+                    return "PRESENT"; // During work hours - consider as present
+                }
+            }
+
             return "PARTIAL";
         }
 
