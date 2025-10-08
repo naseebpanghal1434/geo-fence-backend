@@ -49,6 +49,7 @@ public class AttendanceDataService {
     private final AttendancePolicyRepository policyRepository;
     private final GeoFenceRepository fenceRepository;
     private final EntityPreferenceRepository entityPreferenceRepository;
+    private final OfficePolicyProvider officePolicyProvider;
     // TODO: Add LeaveApplicationRepository when available
     // private final LeaveApplicationRepository leaveApplicationRepository;
 
@@ -57,12 +58,14 @@ public class AttendanceDataService {
             AttendanceDayRepository dayRepository,
             AttendancePolicyRepository policyRepository,
             GeoFenceRepository fenceRepository,
-            EntityPreferenceRepository entityPreferenceRepository) {
+            EntityPreferenceRepository entityPreferenceRepository,
+            OfficePolicyProvider officePolicyProvider) {
         this.eventRepository = eventRepository;
         this.dayRepository = dayRepository;
         this.policyRepository = policyRepository;
         this.fenceRepository = fenceRepository;
         this.entityPreferenceRepository = entityPreferenceRepository;
+        this.officePolicyProvider = officePolicyProvider;
     }
 
     /**
@@ -379,6 +382,12 @@ public class AttendanceDataService {
             AttendanceDataResponse.DailyAttendanceData dailyData = new AttendanceDataResponse.DailyAttendanceData();
             dailyData.setDate(currentDate.format(DATE_FORMATTER));
 
+            // Check if this date is a weekend for the org
+            // We can check using any accountId since weekend is org-level
+            HolidayInfo dateHolidayInfo = getHolidayInfo(request.getOrgId(), currentDate,
+                    request.getAccountIds().isEmpty() ? 0L : request.getAccountIds().get(0));
+            dailyData.setIsWeekend(dateHolidayInfo.isWeekend());
+
             // Compute date summary
             AttendanceDataResponse.DateSummary dateSummary = computeDateSummary(
                     request, currentDate, eventsMap, daysMap, policy, userTimeZone);
@@ -504,7 +513,7 @@ public class AttendanceDataService {
         }
 
         // Breaks (convert to user timezone)
-        List<AttendanceDataResponse.BreakInterval> breaks = extractBreaks(events, userTimeZone);
+        List<AttendanceDataResponse.BreakInterval> breaks = extractBreaks(events, userTimeZone, orgId, date);
         int totalBreakMinutes = breaks.stream()
                 .mapToInt(AttendanceDataResponse.BreakInterval::getDurationMinutes)
                 .sum();
@@ -538,7 +547,7 @@ public class AttendanceDataService {
 
         // Timeline (all punches with date+time, sorted chronologically)
         List<AttendanceDataResponse.PunchEvent> timeline = buildTimeline(
-                events, fenceMap, policy, date, checkInEvent, checkOutEvent, userTimeZone);
+                events, fenceMap, policy, date, checkInEvent, checkOutEvent, userTimeZone, orgId);
         userData.setTimeline(timeline);
 
         return userData;
@@ -548,7 +557,7 @@ public class AttendanceDataService {
             List<AttendanceEvent> events, Map<Long, GeoFence> fenceMap,
             AttendancePolicy policy, LocalDate date,
             AttendanceEvent checkInEvent, AttendanceEvent checkOutEvent,
-            String userTimeZone) {
+            String userTimeZone, Long orgId) {
 
         List<AttendanceDataResponse.PunchEvent> timeline = new ArrayList<>();
 
@@ -572,7 +581,7 @@ public class AttendanceDataService {
                             event.getLat(), event.getLon(),
                             fence.getCenterLat(), fence.getCenterLng()
                     );
-                    if (event.getUnderRange()) {
+                    if (Boolean.TRUE.equals(event.getUnderRange())) {
                         punchEvent.setLocationLabel(fence.getName());
                     } else {
                         punchEvent.setLocationLabel(String.format("%.2f km away from %s", distance / 1000.0, fence.getName()));
@@ -587,7 +596,7 @@ public class AttendanceDataService {
             punchEvent.setLat(event.getLat());
             punchEvent.setLon(event.getLon());
             punchEvent.setWithinFence(event.getUnderRange());
-            punchEvent.setIntegrityVerdict(event.getVerdict().name());
+            punchEvent.setIntegrityVerdict(event.getVerdict() != null ? event.getVerdict().name() : "UNKNOWN");
             punchEvent.setFailReason(event.getFailReason());
 
             timeline.add(punchEvent);
@@ -598,7 +607,9 @@ public class AttendanceDataService {
             AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
             missingCheckIn.setEventId(null);
             missingCheckIn.setType("MISSING_CHECK_IN");
-            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
+            // Use office start time instead of "--:--:--"
+            LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
+            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " " + officeStartTime.format(TIME_FORMATTER));
             missingCheckIn.setAttemptStatus("MISSING");
             missingCheckIn.setLocationLabel("No check-in recorded");
             missingCheckIn.setLat(null);
@@ -612,7 +623,9 @@ public class AttendanceDataService {
             AttendanceDataResponse.PunchEvent missingCheckIn = new AttendanceDataResponse.PunchEvent();
             missingCheckIn.setEventId(null);
             missingCheckIn.setType("MISSING_CHECK_IN");
-            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
+            // Use office start time instead of "--:--:--"
+            LocalTime officeStartTime = officePolicyProvider.getOfficeStartTime(orgId);
+            missingCheckIn.setDateTime(date.format(DATE_FORMATTER) + " " + officeStartTime.format(TIME_FORMATTER));
             missingCheckIn.setAttemptStatus("MISSING");
             missingCheckIn.setLocationLabel("No check-in recorded");
             missingCheckIn.setLat(null);
@@ -629,7 +642,9 @@ public class AttendanceDataService {
             AttendanceDataResponse.PunchEvent missingCheckOut = new AttendanceDataResponse.PunchEvent();
             missingCheckOut.setEventId(null);
             missingCheckOut.setType("MISSING_CHECK_OUT");
-            missingCheckOut.setDateTime(date.format(DATE_FORMATTER) + " --:--:--");
+            // Use office end time instead of "--:--:--"
+            LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+            missingCheckOut.setDateTime(date.format(DATE_FORMATTER) + " " + officeEndTime.format(TIME_FORMATTER));
             missingCheckOut.setAttemptStatus("MISSING");
             missingCheckOut.setLocationLabel("No check-out recorded");
             missingCheckOut.setLat(null);
@@ -650,7 +665,7 @@ public class AttendanceDataService {
                 .orElse(null);
     }
 
-    private List<AttendanceDataResponse.BreakInterval> extractBreaks(List<AttendanceEvent> events, String userTimeZone) {
+    private List<AttendanceDataResponse.BreakInterval> extractBreaks(List<AttendanceEvent> events, String userTimeZone, Long orgId, LocalDate date) {
         List<AttendanceDataResponse.BreakInterval> breaks = new ArrayList<>();
 
         AttendanceEvent breakStart = null;
@@ -677,14 +692,24 @@ public class AttendanceDataService {
             }
         }
 
-        // If break start exists but no end, add incomplete break
+        // If break start exists but no end, assume break ended at office end time
         if (breakStart != null) {
             AttendanceDataResponse.BreakInterval breakInterval = new AttendanceDataResponse.BreakInterval();
             LocalDateTime userBreakStartDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
                     breakStart.getTsUtc(), userTimeZone);
             breakInterval.setStartTime(userBreakStartDateTime.toLocalTime().format(TIME_FORMATTER));
-            breakInterval.setEndTime(null);
-            breakInterval.setDurationMinutes(0);
+
+            // Assume break ended at office end time
+            LocalTime officeEndTime = officePolicyProvider.getOfficeEndTime(orgId);
+            breakInterval.setEndTime(officeEndTime.format(TIME_FORMATTER));
+
+            // Calculate estimated duration from break start to office end time
+            LocalDateTime officeEndDateTime = date.atTime(officeEndTime);
+            LocalDateTime serverOfficeEndDateTime = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(
+                    officeEndDateTime, userTimeZone);
+            long estimatedDurationMinutes = ChronoUnit.MINUTES.between(breakStart.getTsUtc(), serverOfficeEndDateTime);
+            breakInterval.setDurationMinutes((int) Math.max(0, estimatedDurationMinutes));
+
             breaks.add(breakInterval);
         }
 
@@ -782,19 +807,21 @@ public class AttendanceDataService {
             if (isLateCheckIn(checkInEvent, policy, userTimeZone)) {
                 flags.add("Late check-in");
             }
-            if (!checkInEvent.getUnderRange()) {
+            if (!Boolean.TRUE.equals(checkInEvent.getUnderRange())) {
                 flags.add("Outside fence at check-in");
             }
-            if ("WARN".equals(checkInEvent.getVerdict().name()) || "FAIL".equals(checkInEvent.getVerdict().name())) {
+            if (checkInEvent.getVerdict() != null &&
+                ("WARN".equals(checkInEvent.getVerdict().name()) || "FAIL".equals(checkInEvent.getVerdict().name()))) {
                 flags.add("Integrity warning at check-in");
             }
         }
 
         if (checkOutEvent != null) {
-            if (!checkOutEvent.getUnderRange()) {
+            if (!Boolean.TRUE.equals(checkOutEvent.getUnderRange())) {
                 flags.add("Outside fence at check-out");
             }
-            if ("WARN".equals(checkOutEvent.getVerdict().name()) || "FAIL".equals(checkOutEvent.getVerdict().name())) {
+            if (checkOutEvent.getVerdict() != null &&
+                ("WARN".equals(checkOutEvent.getVerdict().name()) || "FAIL".equals(checkOutEvent.getVerdict().name()))) {
                 flags.add("Integrity warning at check-out");
             }
         }
