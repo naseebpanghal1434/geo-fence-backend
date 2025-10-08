@@ -15,6 +15,7 @@ import com.tse.core_application.repository.attendance.AttendanceEventRepository;
 import com.tse.core_application.repository.fence.GeoFenceRepository;
 import com.tse.core_application.repository.policy.AttendancePolicyRepository;
 import com.tse.core_application.repository.preference.EntityPreferenceRepository;
+import com.tse.core_application.util.DateTimeUtils;
 import com.tse.core_application.util.GeoMath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,9 +67,13 @@ public class AttendanceDataService {
 
     /**
      * Get comprehensive attendance data for given org, date range, and account IDs.
+     *
+     * @param request Attendance data request with orgId, date range, and account IDs
+     * @param userTimeZone User's timezone (e.g., "Asia/Kolkata", "America/New_York")
+     * @return Attendance data response with all events in user's timezone
      */
     @Transactional(readOnly = true)
-    public AttendanceDataResponse getAttendanceData(AttendanceDataRequest request) {
+    public AttendanceDataResponse getAttendanceData(AttendanceDataRequest request, String userTimeZone) {
         // 1. Validate request
         validateRequest(request);
 
@@ -97,9 +102,9 @@ public class AttendanceDataService {
         // 4. Load user names in bulk (optimization)
         Map<Long, String> userNamesMap = getUserNamesMap(request.getAccountIds());
 
-        // 5. Load all events for the date range and account IDs
+        // 5. Load all events for the date range and account IDs (timezone-aware)
         Map<Long, Map<LocalDate, List<AttendanceEvent>>> eventsMap = loadEvents(
-                request.getOrgId(), request.getAccountIds(), fromDate, toDate);
+                request.getOrgId(), request.getAccountIds(), fromDate, toDate, userTimeZone);
 
         // 6. Load all attendance days for the date range and account IDs
         Map<Long, Map<LocalDate, AttendanceDay>> daysMap = loadAttendanceDays(
@@ -116,7 +121,7 @@ public class AttendanceDataService {
 
         // B) Build unified attendance data (sorted by date, then by accountId)
         response.setAttendanceData(buildAttendanceData(
-                request, fromDate, toDate, eventsMap, daysMap, fenceMap, policy, userNamesMap));
+                request, fromDate, toDate, eventsMap, daysMap, fenceMap, policy, userNamesMap, userTimeZone));
 
         return response;
     }
@@ -177,19 +182,39 @@ public class AttendanceDataService {
         }
     }
 
+    /**
+     * Load events for the given date range in user's timezone.
+     * Converts user's date range to server timezone for querying,
+     * then groups events by user's local date (not server's date).
+     *
+     * @param userTimeZone User's timezone for proper date range conversion
+     */
     private Map<Long, Map<LocalDate, List<AttendanceEvent>>> loadEvents(
-            Long orgId, List<Long> accountIds, LocalDate fromDate, LocalDate toDate) {
+            Long orgId, List<Long> accountIds, LocalDate fromDate, LocalDate toDate, String userTimeZone) {
         Map<Long, Map<LocalDate, List<AttendanceEvent>>> result = new HashMap<>();
 
-        LocalDateTime start = fromDate.atStartOfDay();
-        LocalDateTime end = toDate.plusDays(1).atStartOfDay();
+        // Convert user's date range to server timezone
+        // User wants events from 00:00:00 to 23:59:59 in THEIR timezone
+        LocalDateTime userStartOfDay = fromDate.atStartOfDay();
+        LocalDateTime serverStart = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(
+                userStartOfDay, userTimeZone);
+
+        LocalDateTime userEndOfDay = toDate.plusDays(1).atStartOfDay();
+        LocalDateTime serverEnd = DateTimeUtils.convertUserDateToServerTimezoneWithSeconds(
+                userEndOfDay, userTimeZone);
 
         for (Long accountId : accountIds) {
             List<AttendanceEvent> events = eventRepository.findByOrgIdAndAccountIdAndTsUtcBetweenOrderByTsUtcAsc(
-                    orgId, accountId, start, end);
+                    orgId, accountId, serverStart, serverEnd);
 
+            // Group events by USER's local date (not server's date)
             Map<LocalDate, List<AttendanceEvent>> dateMap = events.stream()
-                    .collect(Collectors.groupingBy(e -> e.getTsUtc().toLocalDate()));
+                    .collect(Collectors.groupingBy(e -> {
+                        // Convert server timestamp to user's timezone to get correct date
+                        LocalDateTime userDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                                e.getTsUtc(), userTimeZone);
+                        return userDateTime.toLocalDate();
+                    }));
 
             result.put(accountId, dateMap);
         }
@@ -341,7 +366,8 @@ public class AttendanceDataService {
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
             Map<Long, GeoFence> fenceMap,
             AttendancePolicy policy,
-            Map<Long, String> userNamesMap) {
+            Map<Long, String> userNamesMap,
+            String userTimeZone) {
 
         List<AttendanceDataResponse.DailyAttendanceData> attendanceData = new ArrayList<>();
 
@@ -366,7 +392,7 @@ public class AttendanceDataService {
             for (Long accountId : sortedAccountIds) {
                 AttendanceDataResponse.UserAttendanceData userAttendance = buildUserAttendanceData(
                         request.getOrgId(), accountId, currentDate,
-                        eventsMap, daysMap, fenceMap, policy, userNamesMap);
+                        eventsMap, daysMap, fenceMap, policy, userNamesMap, userTimeZone);
 
                 // Only add non-weekend entries
                 if (userAttendance != null) {
@@ -392,7 +418,8 @@ public class AttendanceDataService {
             Map<Long, Map<LocalDate, AttendanceDay>> daysMap,
             Map<Long, GeoFence> fenceMap,
             AttendancePolicy policy,
-            Map<Long, String> userNamesMap) {
+            Map<Long, String> userNamesMap,
+            String userTimeZone) {
 
         HolidayInfo holidayInfo = getHolidayInfo(orgId, date, accountId);
 
@@ -481,7 +508,7 @@ public class AttendanceDataService {
 
         // Timeline (all punches with date+time, sorted chronologically)
         List<AttendanceDataResponse.PunchEvent> timeline = buildTimeline(
-                events, fenceMap, policy, date, checkInEvent, checkOutEvent);
+                events, fenceMap, policy, date, checkInEvent, checkOutEvent, userTimeZone);
         userData.setTimeline(timeline);
 
         return userData;
@@ -490,7 +517,8 @@ public class AttendanceDataService {
     private List<AttendanceDataResponse.PunchEvent> buildTimeline(
             List<AttendanceEvent> events, Map<Long, GeoFence> fenceMap,
             AttendancePolicy policy, LocalDate date,
-            AttendanceEvent checkInEvent, AttendanceEvent checkOutEvent) {
+            AttendanceEvent checkInEvent, AttendanceEvent checkOutEvent,
+            String userTimeZone) {
 
         List<AttendanceDataResponse.PunchEvent> timeline = new ArrayList<>();
 
@@ -499,7 +527,11 @@ public class AttendanceDataService {
             AttendanceDataResponse.PunchEvent punchEvent = new AttendanceDataResponse.PunchEvent();
             punchEvent.setEventId(event.getId());
             punchEvent.setType(event.getEventKind().name());
-            punchEvent.setDateTime(event.getTsUtc().format(DATETIME_FORMATTER)); // Full date+time
+
+            // Convert server timestamp to user timezone
+            LocalDateTime userDateTime = DateTimeUtils.convertServerDateToUserTimezoneWithSeconds(
+                    event.getTsUtc(), userTimeZone);
+            punchEvent.setDateTime(userDateTime.format(DATETIME_FORMATTER)); // Full date+time in user timezone
             punchEvent.setAttemptStatus(event.getSuccess() ? "SUCCESSFUL" : "UNSUCCESSFUL");
 
             // Location label
